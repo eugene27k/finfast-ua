@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useToken, useClientInfo, useStatement } from "@/lib/hooks";
+import { useToken, useClientInfo, useStatement, useMultiStatement } from "@/lib/hooks";
 import SpendingChart from "@/components/SpendingChart";
 import DailyChart from "@/components/DailyChart";
+import AccountFilter from "@/components/AccountFilter";
 import { getMccCategory, getCategoryColor } from "@/lib/mcc";
-import { formatAmount, getCurrencyInfo } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { useRouter } from "next/navigation";
 
 export default function AnalyticsPage() {
@@ -13,7 +14,8 @@ export default function AnalyticsPage() {
   const { data: client } = useClientInfo(token);
   const router = useRouter();
 
-  const [selectedAccount, setSelectedAccount] = useState("");
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
+  const [hideEmpty, setHideEmpty] = useState(false);
   const [period, setPeriod] = useState(30);
 
   const from = useMemo(
@@ -21,12 +23,24 @@ export default function AnalyticsPage() {
     [period]
   );
 
-  const accountId = selectedAccount || client?.accounts[0]?.id || "";
-  const account = client?.accounts.find((a) => a.id === accountId);
-  const currencyCode = account?.currencyCode || 980;
-  const currency = getCurrencyInfo(currencyCode);
+  const allAccounts = client?.accounts || [];
+  const isAllSelected = selectedAccounts.length === 0;
+  const effectiveIds = isAllSelected
+    ? allAccounts.map((a) => a.id)
+    : selectedAccounts;
 
-  const { data: transactions, loading } = useStatement(token, accountId, from);
+  const currencyCode = allAccounts[0]?.currencyCode || 980;
+
+  const singleId = effectiveIds.length === 1 ? effectiveIds[0] : "";
+  const { data: singleData, loading: singleLoading } = useStatement(token, singleId, from);
+  const { data: multiData, loading: multiLoading } = useMultiStatement(
+    token,
+    effectiveIds.length > 1 ? effectiveIds : [],
+    from
+  );
+
+  const transactions = effectiveIds.length === 1 ? singleData : multiData;
+  const loading = effectiveIds.length === 1 ? singleLoading : multiLoading;
 
   const categoryBreakdown = useMemo(() => {
     const expenses = transactions.filter((tx) => tx.amount < 0);
@@ -55,24 +69,17 @@ export default function AnalyticsPage() {
     <div className="max-w-6xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-gray-900">Аналітика витрат</h1>
 
-      <div className="flex flex-wrap gap-3 items-center">
+      <div className="space-y-3">
         {client && (
-          <select
-            value={accountId}
-            onChange={(e) => setSelectedAccount(e.target.value)}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {client.accounts.map((acc) => {
-              const info = getCurrencyInfo(acc.currencyCode);
-              return (
-                <option key={acc.id} value={acc.id}>
-                  {acc.maskedPan[0] || acc.type} ({info.code})
-                </option>
-              );
-            })}
-          </select>
+          <AccountFilter
+            accounts={allAccounts}
+            selectedIds={selectedAccounts}
+            onSelectionChange={setSelectedAccounts}
+            hideEmpty={hideEmpty}
+            onHideEmptyChange={setHideEmpty}
+          />
         )}
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
           {[
             { label: "7 днів", value: 7 },
             { label: "14 днів", value: 14 },

@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useToken, useClientInfo, useCurrencyRates, useStatement } from "@/lib/hooks";
 import { useBudgets, getBudgetStatuses } from "@/lib/budgets";
 import AccountCard from "@/components/AccountCard";
 import BudgetAlertBanner from "@/components/BudgetAlertBanner";
 import { getCurrencyInfo, formatAmount } from "@/lib/currency";
+import { sortAccounts } from "@/lib/accounts";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -15,6 +16,7 @@ export default function DashboardPage() {
   const { data: rates } = useCurrencyRates();
   const { budgets } = useBudgets();
   const router = useRouter();
+  const [hideEmpty, setHideEmpty] = useState(false);
 
   const now = new Date();
   const monthStart = useMemo(
@@ -53,8 +55,12 @@ export default function DashboardPage() {
 
   if (!client) return null;
 
-  const uahAccounts = client.accounts.filter((a) => a.currencyCode === 980);
-  const foreignAccounts = client.accounts.filter((a) => a.currencyCode !== 980);
+  const allSorted = sortAccounts(client.accounts);
+  const uahAccounts = allSorted.filter((a) => a.currencyCode === 980);
+  const foreignAccounts = allSorted.filter((a) => a.currencyCode !== 980);
+
+  const visibleUah = hideEmpty ? uahAccounts.filter((a) => a.balance !== 0) : uahAccounts;
+  const visibleForeign = hideEmpty ? foreignAccounts.filter((a) => a.balance !== 0) : foreignAccounts;
 
   const totalUah = uahAccounts.reduce((sum, a) => sum + a.balance, 0);
 
@@ -107,28 +113,39 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div>
-        <h2 className="text-lg font-semibold text-gray-800 mb-3">
-          Рахунки UAH
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {uahAccounts.map((account) => (
-            <AccountCard
-              key={account.id}
-              account={account}
-              onClick={() => router.push(`/transactions?account=${account.id}`)}
-            />
-          ))}
-        </div>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-800">Рахунки</h2>
+        <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={hideEmpty}
+            onChange={(e) => setHideEmpty(e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+          />
+          Приховати пусті рахунки
+        </label>
       </div>
 
-      {foreignAccounts.length > 0 && (
+      {visibleUah.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold text-gray-800 mb-3">
-            Валютні рахунки
-          </h2>
+          <h3 className="text-sm font-medium text-gray-500 mb-3">UAH</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {foreignAccounts.map((account) => (
+            {visibleUah.map((account) => (
+              <AccountCard
+                key={account.id}
+                account={account}
+                onClick={() => router.push(`/transactions?account=${account.id}`)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {visibleForeign.length > 0 && (
+        <div>
+          <h3 className="text-sm font-medium text-gray-500 mb-3">Валютні</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {visibleForeign.map((account) => (
               <AccountCard
                 key={account.id}
                 account={account}
@@ -146,7 +163,6 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold text-gray-800 mb-3">Банки</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {client.jars.map((jar) => {
-              const currency = getCurrencyInfo(jar.currencyCode);
               const progress = jar.goal > 0 ? (jar.balance / jar.goal) * 100 : 0;
               return (
                 <div

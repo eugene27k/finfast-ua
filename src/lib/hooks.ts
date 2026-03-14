@@ -118,12 +118,13 @@ export function useStatement(token: string, accountId: string, from: number, to?
   const [error, setError] = useState<string | null>(null);
 
   const cacheKey = `${accountId}:${from}:${to || ""}`;
+  const storageKey = `${STATEMENT_CACHE_KEY}_${accountId}`;
 
   const fetch_ = useCallback(async (skipCache = false) => {
     if (!token || !accountId) return;
 
     if (!skipCache) {
-      const cached = getCache<MonobankStatement[]>(STATEMENT_CACHE_KEY, cacheKey, STATEMENT_CACHE_TTL);
+      const cached = getCache<MonobankStatement[]>(storageKey, cacheKey, STATEMENT_CACHE_TTL);
       if (cached) {
         setData(cached);
         return;
@@ -148,19 +149,77 @@ export function useStatement(token: string, accountId: string, from: number, to?
       }
       const result = await res.json();
       setData(result);
-      setCache(STATEMENT_CACHE_KEY, cacheKey, result);
+      setCache(storageKey, cacheKey, result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
       setLoading(false);
     }
-  }, [token, accountId, from, to, cacheKey]);
+  }, [token, accountId, from, to, cacheKey, storageKey]);
 
   useEffect(() => {
     fetch_();
   }, [fetch_]);
 
   return { data, loading, error, refetch: () => fetch_(true) };
+}
+
+export function useMultiStatement(token: string, accountIds: string[], from: number, to?: number) {
+  const [data, setData] = useState<MonobankStatement[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const idsKey = accountIds.sort().join(",");
+
+  const fetch_ = useCallback(async () => {
+    if (!token || accountIds.length === 0) {
+      setData([]);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const results: MonobankStatement[][] = [];
+      for (const accId of accountIds) {
+        const storageKey = `${STATEMENT_CACHE_KEY}_${accId}`;
+        const cacheKey = `${accId}:${from}:${to || ""}`;
+        const cached = getCache<MonobankStatement[]>(storageKey, cacheKey, STATEMENT_CACHE_TTL);
+
+        if (cached) {
+          results.push(cached);
+        } else {
+          const params = new URLSearchParams({
+            account: accId,
+            from: String(from),
+          });
+          if (to) params.set("to", String(to));
+
+          const res = await fetch(`/api/monobank/statement?${params}`, {
+            headers: { "x-mono-token": token },
+          });
+          if (res.ok) {
+            const result = await res.json();
+            results.push(result);
+            setCache(storageKey, cacheKey, result);
+          }
+        }
+      }
+      const merged = results.flat().sort((a, b) => b.time - a.time);
+      setData(merged);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, idsKey, from, to]);
+
+  useEffect(() => {
+    fetch_();
+  }, [fetch_]);
+
+  return { data, loading, error };
 }
 
 export function useCurrencyRates() {

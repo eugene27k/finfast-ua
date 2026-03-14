@@ -2,9 +2,9 @@
 
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useToken, useClientInfo, useStatement } from "@/lib/hooks";
+import { useToken, useClientInfo, useStatement, useMultiStatement } from "@/lib/hooks";
 import TransactionRow from "@/components/TransactionRow";
-import AccountCard from "@/components/AccountCard";
+import AccountFilter from "@/components/AccountFilter";
 import { formatAmount } from "@/lib/currency";
 
 function TransactionsContent() {
@@ -14,7 +14,10 @@ function TransactionsContent() {
   const { data: client } = useClientInfo(token);
 
   const initialAccount = searchParams.get("account") || "";
-  const [selectedAccount, setSelectedAccount] = useState(initialAccount);
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(
+    initialAccount ? [initialAccount] : []
+  );
+  const [hideEmpty, setHideEmpty] = useState(false);
   const [period, setPeriod] = useState(30);
   const [search, setSearch] = useState("");
 
@@ -23,8 +26,28 @@ function TransactionsContent() {
     [period]
   );
 
-  const accountId = selectedAccount || client?.accounts[0]?.id || "";
-  const { data: transactions, loading, error } = useStatement(token, accountId, from);
+  const allAccounts = client?.accounts || [];
+  const isAllSelected = selectedAccounts.length === 0;
+  const effectiveIds = isAllSelected
+    ? allAccounts.map((a) => a.id)
+    : selectedAccounts;
+
+  // Use single-account hook when one selected, multi when many
+  const singleId = effectiveIds.length === 1 ? effectiveIds[0] : "";
+  const { data: singleData, loading: singleLoading, error: singleError } = useStatement(
+    token,
+    singleId,
+    from
+  );
+  const { data: multiData, loading: multiLoading, error: multiError } = useMultiStatement(
+    token,
+    effectiveIds.length > 1 ? effectiveIds : [],
+    from
+  );
+
+  const transactions = effectiveIds.length === 1 ? singleData : multiData;
+  const loading = effectiveIds.length === 1 ? singleLoading : multiLoading;
+  const error = effectiveIds.length === 1 ? singleError : multiError;
 
   const filtered = useMemo(() => {
     if (!search) return transactions;
@@ -36,7 +59,7 @@ function TransactionsContent() {
     );
   }, [transactions, search]);
 
-  const account = client?.accounts.find((a) => a.id === accountId);
+  const currencyCode = allAccounts[0]?.currencyCode || 980;
 
   const totalIncome = filtered
     .filter((tx) => tx.amount > 0)
@@ -56,17 +79,13 @@ function TransactionsContent() {
       <h1 className="text-2xl font-bold text-gray-900">Транзакції</h1>
 
       {client && (
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {client.accounts.map((acc) => (
-            <div key={acc.id} className="min-w-[200px]">
-              <AccountCard
-                account={acc}
-                selected={acc.id === accountId}
-                onClick={() => setSelectedAccount(acc.id)}
-              />
-            </div>
-          ))}
-        </div>
+        <AccountFilter
+          accounts={allAccounts}
+          selectedIds={selectedAccounts}
+          onSelectionChange={setSelectedAccounts}
+          hideEmpty={hideEmpty}
+          onHideEmptyChange={setHideEmpty}
+        />
       )}
 
       <div className="flex flex-wrap gap-3 items-center">
@@ -98,26 +117,24 @@ function TransactionsContent() {
         />
       </div>
 
-      {account && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-gray-200">
-            <p className="text-sm text-gray-500">Транзакцій</p>
-            <p className="text-2xl font-bold text-gray-900">{filtered.length}</p>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-gray-200">
-            <p className="text-sm text-gray-500">Надходження</p>
-            <p className="text-2xl font-bold text-green-600">
-              +{formatAmount(totalIncome, account.currencyCode)}
-            </p>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-gray-200">
-            <p className="text-sm text-gray-500">Витрати</p>
-            <p className="text-2xl font-bold text-red-600">
-              -{formatAmount(totalExpense, account.currencyCode)}
-            </p>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <p className="text-sm text-gray-500">Транзакцій</p>
+          <p className="text-2xl font-bold text-gray-900">{filtered.length}</p>
         </div>
-      )}
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <p className="text-sm text-gray-500">Надходження</p>
+          <p className="text-2xl font-bold text-green-600">
+            +{formatAmount(totalIncome, currencyCode)}
+          </p>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-gray-200">
+          <p className="text-sm text-gray-500">Витрати</p>
+          <p className="text-2xl font-bold text-red-600">
+            -{formatAmount(totalExpense, currencyCode)}
+          </p>
+        </div>
+      </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {loading ? (

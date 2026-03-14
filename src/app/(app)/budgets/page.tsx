@@ -2,11 +2,12 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useToken, useClientInfo, useStatement } from "@/lib/hooks";
+import { useToken, useClientInfo, useStatement, useMultiStatement } from "@/lib/hooks";
 import { useBudgets, getBudgetStatuses } from "@/lib/budgets";
-import { CATEGORY_NAMES, getCategoryColor } from "@/lib/mcc";
+import { CATEGORY_NAMES } from "@/lib/mcc";
 import { getCurrencyInfo } from "@/lib/currency";
 import BudgetProgressCard from "@/components/BudgetProgressCard";
+import AccountFilter from "@/components/AccountFilter";
 
 export default function BudgetsPage() {
   const { token, ready: tokenReady } = useToken();
@@ -14,7 +15,8 @@ export default function BudgetsPage() {
   const { budgets, ready: budgetsReady, setBudget, removeBudget } = useBudgets();
   const router = useRouter();
 
-  const [selectedAccount, setSelectedAccount] = useState("");
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
+  const [hideEmpty, setHideEmpty] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editCategory, setEditCategory] = useState<string | null>(null);
   const [formCategory, setFormCategory] = useState("");
@@ -31,11 +33,24 @@ export default function BudgetsPage() {
     [now.getMonth(), now.getFullYear()]
   );
 
-  const accountId = selectedAccount || client?.accounts[0]?.id || "";
-  const account = client?.accounts.find((a) => a.id === accountId);
-  const currencyCode = account?.currencyCode || 980;
+  const allAccounts = client?.accounts || [];
+  const isAllSelected = selectedAccounts.length === 0;
+  const effectiveIds = isAllSelected
+    ? allAccounts.map((a) => a.id)
+    : selectedAccounts;
 
-  const { data: transactions, loading } = useStatement(token, accountId, monthStart);
+  const currencyCode = allAccounts[0]?.currencyCode || 980;
+
+  const singleId = effectiveIds.length === 1 ? effectiveIds[0] : "";
+  const { data: singleData, loading: singleLoading } = useStatement(token, singleId, monthStart);
+  const { data: multiData, loading: multiLoading } = useMultiStatement(
+    token,
+    effectiveIds.length > 1 ? effectiveIds : [],
+    monthStart
+  );
+
+  const transactions = effectiveIds.length === 1 ? singleData : multiData;
+  const loading = effectiveIds.length === 1 ? singleLoading : multiLoading;
 
   const statuses = useMemo(
     () => getBudgetStatuses(budgets, transactions),
@@ -100,20 +115,13 @@ export default function BudgetsPage() {
       </div>
 
       {client && (
-        <select
-          value={accountId}
-          onChange={(e) => setSelectedAccount(e.target.value)}
-          className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {client.accounts.map((acc) => {
-            const info = getCurrencyInfo(acc.currencyCode);
-            return (
-              <option key={acc.id} value={acc.id}>
-                {acc.maskedPan[0] || acc.type} ({info.code})
-              </option>
-            );
-          })}
-        </select>
+        <AccountFilter
+          accounts={allAccounts}
+          selectedIds={selectedAccounts}
+          onSelectionChange={setSelectedAccounts}
+          hideEmpty={hideEmpty}
+          onHideEmptyChange={setHideEmpty}
+        />
       )}
 
       {showForm && (
