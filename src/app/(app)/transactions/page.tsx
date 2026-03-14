@@ -281,6 +281,14 @@ function TransactionsContent() {
             </button>
           ))}
         </div>
+        <span className="relative group">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-400 cursor-help">
+            <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a.75.75 0 1 1-1.061-1.061 .75.75 0 0 1 1.06 1.06ZM10 15a1 1 0 0 1-1-1v-4a1 1 0 1 1 2 0v4a1 1 0 0 1-1 1Z" clipRule="evenodd" />
+          </svg>
+          <span className="invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-6 w-56 bg-gray-800 text-white text-[11px] leading-tight rounded-lg px-3 py-2 z-50 shadow-lg">
+            Monobank API дозволяє отримати виписку максимум за 31 день за один запит.
+          </span>
+        </span>
         <input
           type="text"
           placeholder="Пошук транзакцій..."
