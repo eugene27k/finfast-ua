@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useToken, useClientInfo } from "@/lib/hooks";
+import { useData } from "@/components/DataProvider";
 
 export default function SettingsPage() {
-  const { token, setToken, clearToken } = useToken();
-  const { data: client, loading, error } = useClientInfo(token);
+  const { token, setToken, clearToken, client, clientLoading: loading, clientError: error } = useData();
   const [inputToken, setInputToken] = useState("");
   const [saving, setSaving] = useState(false);
 

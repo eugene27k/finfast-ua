@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useToken, useClientInfo, useCurrencyRates, useStatement } from "@/lib/hooks";
+import { useData } from "@/components/DataProvider";
 import { useBudgets, getBudgetStatuses } from "@/lib/budgets";
+import { useCurrencyRates } from "@/lib/hooks";
 import AccountCard from "@/components/AccountCard";
 import BudgetAlertBanner from "@/components/BudgetAlertBanner";
 import { getCurrencyInfo, formatAmount } from "@/lib/currency";
@@ -11,8 +12,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function DashboardPage() {
-  const { token, ready } = useToken();
-  const { data: client, loading, error } = useClientInfo(token);
+  const { token, tokenReady, client, clientLoading: loading, clientError: error, getFiltered } = useData();
   const { data: rates } = useCurrencyRates();
   const { budgets } = useBudgets();
   const router = useRouter();
@@ -25,18 +25,21 @@ export default function DashboardPage() {
     [now.getMonth(), now.getFullYear()]
   );
 
-  const firstUahAccountId = client?.accounts.find((a) => a.currencyCode === 980)?.id || "";
-  const { data: monthTransactions } = useStatement(token, firstUahAccountId, monthStart);
+  const monthTransactions = useMemo(() => {
+    const all = getFiltered([]);
+    return all.filter((tx) => tx.time >= monthStart);
+  }, [getFiltered, monthStart]);
+
   const budgetStatuses = useMemo(
     () => getBudgetStatuses(budgets, monthTransactions),
     [budgets, monthTransactions]
   );
 
   useEffect(() => {
-    if (ready && !token) router.replace("/settings");
-  }, [ready, token, router]);
+    if (tokenReady && !token) router.replace("/settings");
+  }, [tokenReady, token, router]);
 
-  if (!ready || loading) {
+  if (!tokenReady || loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-pulse text-gray-400">Завантаження даних...</div>

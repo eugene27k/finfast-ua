@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useToken, useClientInfo, useAllStatements } from "@/lib/hooks";
+import { useData } from "@/components/DataProvider";
 import { useBudgets, getBudgetStatuses } from "@/lib/budgets";
 import { CATEGORY_NAMES } from "@/lib/mcc";
 import { getCurrencyInfo } from "@/lib/currency";
@@ -11,8 +11,14 @@ import AccountFilter from "@/components/AccountFilter";
 import RefreshButton from "@/components/RefreshButton";
 
 export default function BudgetsPage() {
-  const { token, ready: tokenReady } = useToken();
-  const { data: client } = useClientInfo(token);
+  const {
+    token,
+    tokenReady,
+    client,
+    statementsLoading: loading,
+    refresh,
+    getFiltered,
+  } = useData();
   const { budgets, ready: budgetsReady, setBudget, removeBudget } = useBudgets();
   const router = useRouter();
 
@@ -34,23 +40,12 @@ export default function BudgetsPage() {
     [now.getMonth(), now.getFullYear()]
   );
 
-  const allAccountIds = useMemo(
-    () => (client?.accounts || []).map((a) => a.id),
-    [client]
-  );
-
   const currencyCode = client?.accounts[0]?.currencyCode || 980;
 
-  const { loading, refresh, getFiltered } = useAllStatements(
-    token,
-    allAccountIds,
-    monthStart
-  );
-
-  const transactions = useMemo(
-    () => getFiltered(selectedAccounts),
-    [getFiltered, selectedAccounts]
-  );
+  const transactions = useMemo(() => {
+    const all = getFiltered(selectedAccounts);
+    return all.filter((tx) => tx.time >= monthStart);
+  }, [getFiltered, selectedAccounts, monthStart]);
 
   const statuses = useMemo(
     () => getBudgetStatuses(budgets, transactions),

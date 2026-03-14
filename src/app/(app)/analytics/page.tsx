@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useToken, useClientInfo, useAllStatements } from "@/lib/hooks";
+import { useData } from "@/components/DataProvider";
 import SpendingChart from "@/components/SpendingChart";
 import DailyChart from "@/components/DailyChart";
 import AccountFilter from "@/components/AccountFilter";
@@ -11,36 +11,31 @@ import { formatAmount } from "@/lib/currency";
 import { useRouter } from "next/navigation";
 
 export default function AnalyticsPage() {
-  const { token, ready } = useToken();
-  const { data: client } = useClientInfo(token);
+  const {
+    token,
+    tokenReady,
+    client,
+    statementsLoading: loading,
+    refresh,
+    getFiltered,
+  } = useData();
   const router = useRouter();
 
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [hideEmpty, setHideEmpty] = useState(false);
   const [period, setPeriod] = useState(30);
 
-  const from = useMemo(
+  const periodFrom = useMemo(
     () => Math.floor(Date.now() / 1000) - period * 24 * 60 * 60,
     [period]
   );
 
-  const allAccountIds = useMemo(
-    () => (client?.accounts || []).map((a) => a.id),
-    [client]
-  );
-
   const currencyCode = client?.accounts[0]?.currencyCode || 980;
 
-  const { loading, refresh, getFiltered } = useAllStatements(
-    token,
-    allAccountIds,
-    from
-  );
-
-  const transactions = useMemo(
-    () => getFiltered(selectedAccounts),
-    [getFiltered, selectedAccounts]
-  );
+  const transactions = useMemo(() => {
+    const all = getFiltered(selectedAccounts);
+    return all.filter((tx) => tx.time >= periodFrom);
+  }, [getFiltered, selectedAccounts, periodFrom]);
 
   const categoryBreakdown = useMemo(() => {
     const expenses = transactions.filter((tx) => tx.amount < 0);
@@ -60,10 +55,10 @@ export default function AnalyticsPage() {
   const totalExpenses = categoryBreakdown.reduce((s, c) => s + c.total, 0);
 
   useEffect(() => {
-    if (ready && !token) router.replace("/settings");
-  }, [ready, token, router]);
+    if (tokenReady && !token) router.replace("/settings");
+  }, [tokenReady, token, router]);
 
-  if (!ready || !token) return null;
+  if (!tokenReady || !token) return null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
