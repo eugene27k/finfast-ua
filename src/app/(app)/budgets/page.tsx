@@ -19,6 +19,7 @@ export default function BudgetsPage() {
     refresh,
     getFiltered,
     lastRefreshedAt,
+    overrides,
   } = useData();
   const { budgets, ready: budgetsReady, setBudget, removeBudget } = useBudgets();
   const router = useRouter();
@@ -49,8 +50,8 @@ export default function BudgetsPage() {
   }, [getFiltered, selectedAccounts, monthStart]);
 
   const statuses = useMemo(
-    () => getBudgetStatuses(budgets, transactions),
-    [budgets, transactions]
+    () => getBudgetStatuses(budgets, transactions, overrides),
+    [budgets, transactions, overrides]
   );
 
   const availableCategories = CATEGORY_NAMES.filter(

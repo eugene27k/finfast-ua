@@ -17,6 +17,19 @@ const MCC_CATEGORIES: Record<string, [number, number][]> = {
 
 export const CATEGORY_NAMES: string[] = [...Object.keys(MCC_CATEGORIES), "Інше"];
 
+export function getEffectiveCategory(
+  mcc: number,
+  txId: string,
+  overrides: Record<string, { categoryName: string; color: string }>
+): { name: string; color: string } {
+  const override = overrides[txId];
+  if (override) {
+    return { name: override.categoryName, color: override.color };
+  }
+  const cat = getMccCategory(mcc);
+  return { name: cat, color: getCategoryColor(cat) };
+}
+
 export function getMccCategory(mcc: number): string {
   for (const [category, ranges] of Object.entries(MCC_CATEGORIES)) {
     for (const [from, to] of ranges) {

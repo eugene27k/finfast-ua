@@ -2,16 +2,18 @@
 
 import type { MonobankStatement } from "@/types/monobank";
 import { formatAmount } from "@/lib/currency";
-import { getMccCategory, getCategoryColor } from "@/lib/mcc";
+import { getEffectiveCategory } from "@/lib/mcc";
+import { useData } from "@/components/DataProvider";
+import CategoryDropdown from "@/components/CategoryDropdown";
 
 interface TransactionRowProps {
   tx: MonobankStatement;
 }
 
 export default function TransactionRow({ tx }: TransactionRowProps) {
+  const { overrides } = useData();
   const isExpense = tx.amount < 0;
-  const category = getMccCategory(tx.mcc);
-  const color = getCategoryColor(category);
+  const { name: category, color } = getEffectiveCategory(tx.mcc, tx.id, overrides);
   const date = new Date(tx.time * 1000);
 
   return (
@@ -26,9 +28,13 @@ export default function TransactionRow({ tx }: TransactionRowProps) {
         <div className="text-sm font-medium text-gray-900 truncate">
           {tx.description}
         </div>
-        <div className="text-xs text-gray-500 flex gap-2">
-          <span>{category}</span>
-          {tx.comment && <span>· {tx.comment}</span>}
+        <div className="flex items-center gap-2">
+          <CategoryDropdown
+            transactionId={tx.id}
+            currentCategory={category}
+            currentColor={color}
+          />
+          {tx.comment && <span className="text-xs text-gray-500">· {tx.comment}</span>}
         </div>
       </div>
       <div className="text-right shrink-0">

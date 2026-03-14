@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  monoToken String   @unique
+  createdAt DateTime @default(now())
+
+  categories CustomCategory[]
+  overrides  TransactionOverride[]
+}
+
+model CustomCategory {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String
+  createdAt DateTime @default(now())
+
+  user      User                  @relation(fields: [userId], references: [id])
+  overrides TransactionOverride[]
+
+  @@unique([userId, name])
+}
+
+model TransactionOverride {
+  id               String   @id @default(cuid())
+  userId           String
+  transactionId    String
+  customCategoryId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id])
+  customCategory CustomCategory? @relation(fields: [customCategoryId], references: [id])
+
+  @@unique([userId, transactionId])
+}

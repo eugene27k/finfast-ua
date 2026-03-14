@@ -14,6 +14,17 @@ import type {
   MonobankAccount,
 } from "@/types/monobank";
 
+export interface CustomCategoryData {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface OverrideInfo {
+  categoryName: string;
+  color: string;
+}
+
 const TOKEN_KEY = "finfast_mono_token";
 const CLIENT_CACHE_KEY = "finfast_client_info";
 const CLIENT_CACHE_TTL = 60_000;
@@ -78,6 +89,11 @@ interface DataContextValue {
   refresh: () => void;
   getFiltered: (selectedIds: string[]) => MonobankStatement[];
   lastRefreshedAt: Date | null;
+  userId: string | null;
+  customCategories: CustomCategoryData[];
+  overrides: Record<string, OverrideInfo>;
+  refreshCategories: () => void;
+  refreshOverrides: () => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -110,9 +126,72 @@ export default function DataProvider({
 
   const clearToken = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem("finfast_user_id");
     sessionStorage.removeItem(CLIENT_CACHE_KEY);
     setTokenState("");
+    setUserId(null);
+    setCustomCategories([]);
+    setOverrides({});
   }, []);
+
+  // --- User ID ---
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    const savedUserId = localStorage.getItem("finfast_user_id");
+    if (savedUserId) {
+      setUserId(savedUserId);
+      return;
+    }
+    fetch("/api/user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ monoToken: token }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.userId) {
+          localStorage.setItem("finfast_user_id", data.userId);
+          setUserId(data.userId);
+        }
+      })
+      .catch(() => {});
+  }, [token]);
+
+  // --- Custom categories ---
+  const [customCategories, setCustomCategories] = useState<CustomCategoryData[]>([]);
+
+  const refreshCategories = useCallback(() => {
+    if (!userId) return;
+    fetch(`/api/categories?userId=${userId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.categories) setCustomCategories(data.categories);
+      })
+      .catch(() => {});
+  }, [userId]);
+
+  useEffect(() => {
+    refreshCategories();
+  }, [refreshCategories]);
+
+  // --- Transaction overrides ---
+  const [overrides, setOverrides] = useState<Record<string, OverrideInfo>>({});
+
+  const refreshOverrides = useCallback(() => {
+    if (!userId) return;
+    fetch(`/api/transactions/overrides?userId=${userId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.overrides) setOverrides(data.overrides);
+      })
+      .catch(() => {});
+  }, [userId]);
+
+  useEffect(() => {
+    refreshOverrides();
+  }, [refreshOverrides]);
 
   // --- Client info ---
   const [client, setClient] = useState<MonobankClientInfo | null>(null);
@@ -296,6 +375,11 @@ export default function DataProvider({
       refresh,
       getFiltered,
       lastRefreshedAt,
+      userId,
+      customCategories,
+      overrides,
+      refreshCategories,
+      refreshOverrides,
     }),
     [
       token,
@@ -313,6 +397,11 @@ export default function DataProvider({
       refresh,
       getFiltered,
       lastRefreshedAt,
+      userId,
+      customCategories,
+      overrides,
+      refreshCategories,
+      refreshOverrides,
     ]
   );
 

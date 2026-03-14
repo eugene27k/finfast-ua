@@ -6,7 +6,7 @@ import SpendingChart from "@/components/SpendingChart";
 import DailyChart from "@/components/DailyChart";
 import AccountFilter from "@/components/AccountFilter";
 import RefreshButton from "@/components/RefreshButton";
-import { getMccCategory, getCategoryColor } from "@/lib/mcc";
+import { getEffectiveCategory } from "@/lib/mcc";
 import { formatAmount } from "@/lib/currency";
 import { useRouter } from "next/navigation";
 
@@ -19,6 +19,7 @@ export default function AnalyticsPage() {
     refresh,
     getFiltered,
     lastRefreshedAt,
+    overrides,
   } = useData();
   const router = useRouter();
 
@@ -40,10 +41,10 @@ export default function AnalyticsPage() {
 
   const categoryBreakdown = useMemo(() => {
     const expenses = transactions.filter((tx) => tx.amount < 0);
-    const map = new Map<string, { total: number; count: number }>();
+    const map = new Map<string, { total: number; count: number; color: string }>();
     for (const tx of expenses) {
-      const cat = getMccCategory(tx.mcc);
-      const entry = map.get(cat) || { total: 0, count: 0 };
+      const { name: cat, color } = getEffectiveCategory(tx.mcc, tx.id, overrides);
+      const entry = map.get(cat) || { total: 0, count: 0, color };
       entry.total += Math.abs(tx.amount);
       entry.count += 1;
       map.set(cat, entry);
@@ -51,7 +52,7 @@ export default function AnalyticsPage() {
     return Array.from(map.entries())
       .map(([name, data]) => ({ name, ...data }))
       .sort((a, b) => b.total - a.total);
-  }, [transactions]);
+  }, [transactions, overrides]);
 
   const totalExpenses = categoryBreakdown.reduce((s, c) => s + c.total, 0);
 
@@ -123,6 +124,7 @@ export default function AnalyticsPage() {
               <SpendingChart
                 transactions={transactions}
                 currencyCode={currencyCode}
+                overrides={overrides}
               />
             </div>
 
@@ -140,7 +142,7 @@ export default function AnalyticsPage() {
                     <div key={cat.name} className="flex items-center gap-3">
                       <div
                         className="w-3 h-3 rounded-full shrink-0"
-                        style={{ backgroundColor: getCategoryColor(cat.name) }}
+                        style={{ backgroundColor: cat.color }}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-center">
@@ -154,7 +156,7 @@ export default function AnalyticsPage() {
                             className="h-1.5 rounded-full"
                             style={{
                               width: `${pct}%`,
-                              backgroundColor: getCategoryColor(cat.name),
+                              backgroundColor: cat.color,
                             }}
                           />
                         </div>

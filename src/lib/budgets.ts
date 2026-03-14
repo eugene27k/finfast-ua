@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { MonobankStatement, BudgetStatus } from "@/types/monobank";
-import { getMccCategory } from "@/lib/mcc";
+import { getEffectiveCategory } from "@/lib/mcc";
 
 const BUDGETS_KEY = "finfast_budgets";
 
@@ -44,7 +44,8 @@ export function useBudgets() {
 
 export function getBudgetStatuses(
   budgets: Record<string, number>,
-  transactions: MonobankStatement[]
+  transactions: MonobankStatement[],
+  overrides: Record<string, { categoryName: string; color: string }> = {}
 ): BudgetStatus[] {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -56,7 +57,7 @@ export function getBudgetStatuses(
 
   const spentMap = new Map<string, number>();
   for (const tx of expenses) {
-    const cat = getMccCategory(tx.mcc);
+    const { name: cat } = getEffectiveCategory(tx.mcc, tx.id, overrides);
     spentMap.set(cat, (spentMap.get(cat) || 0) + Math.abs(tx.amount));
   }
 

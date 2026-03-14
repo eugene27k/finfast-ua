@@ -2,29 +2,33 @@
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import type { MonobankStatement } from "@/types/monobank";
-import { getMccCategory, getCategoryColor } from "@/lib/mcc";
+import { getEffectiveCategory } from "@/lib/mcc";
 import { getCurrencyInfo } from "@/lib/currency";
+import type { OverrideInfo } from "@/components/DataProvider";
 
 interface SpendingChartProps {
   transactions: MonobankStatement[];
   currencyCode: number;
+  overrides?: Record<string, OverrideInfo>;
 }
 
-export default function SpendingChart({ transactions, currencyCode }: SpendingChartProps) {
+export default function SpendingChart({ transactions, currencyCode, overrides = {} }: SpendingChartProps) {
   const currency = getCurrencyInfo(currencyCode);
   const expenses = transactions.filter((tx) => tx.amount < 0);
 
-  const categoryMap = new Map<string, number>();
+  const categoryMap = new Map<string, { total: number; color: string }>();
   for (const tx of expenses) {
-    const cat = getMccCategory(tx.mcc);
-    categoryMap.set(cat, (categoryMap.get(cat) || 0) + Math.abs(tx.amount));
+    const { name: cat, color } = getEffectiveCategory(tx.mcc, tx.id, overrides);
+    const entry = categoryMap.get(cat) || { total: 0, color };
+    entry.total += Math.abs(tx.amount);
+    categoryMap.set(cat, entry);
   }
 
   const data = Array.from(categoryMap.entries())
-    .map(([name, value]) => ({
+    .map(([name, { total, color }]) => ({
       name,
-      value: value / Math.pow(10, currency.digits),
-      color: getCategoryColor(name),
+      value: total / Math.pow(10, currency.digits),
+      color,
     }))
     .sort((a, b) => b.value - a.value);
 

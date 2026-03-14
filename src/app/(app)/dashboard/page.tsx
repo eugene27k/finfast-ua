@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function DashboardPage() {
-  const { token, tokenReady, client, clientLoading: loading, clientError: error, getFiltered } = useData();
+  const { token, tokenReady, client, clientLoading: loading, clientError: error, getFiltered, overrides } = useData();
   const { data: rates } = useCurrencyRates();
   const { budgets } = useBudgets();
   const router = useRouter();
@@ -31,8 +31,8 @@ export default function DashboardPage() {
   }, [getFiltered, monthStart]);
 
   const budgetStatuses = useMemo(
-    () => getBudgetStatuses(budgets, monthTransactions),
-    [budgets, monthTransactions]
+    () => getBudgetStatuses(budgets, monthTransactions, overrides),
+    [budgets, monthTransactions, overrides]
   );
 
   useEffect(() => {
