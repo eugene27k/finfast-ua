@@ -9,7 +9,7 @@ import { formatAmount, getCurrencyInfo } from "@/lib/currency";
 import { useRouter } from "next/navigation";
 
 export default function AnalyticsPage() {
-  const { token } = useToken();
+  const { token, ready } = useToken();
   const { data: client } = useClientInfo(token);
   const router = useRouter();
 
@@ -46,10 +46,10 @@ export default function AnalyticsPage() {
   const totalExpenses = categoryBreakdown.reduce((s, c) => s + c.total, 0);
 
   useEffect(() => {
-    if (!token) router.replace("/settings");
-  }, [token, router]);
+    if (ready && !token) router.replace("/settings");
+  }, [ready, token, router]);
 
-  if (!token) return null;
+  if (!ready || !token) return null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">

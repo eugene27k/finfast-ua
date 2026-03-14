@@ -7,16 +7,16 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function DashboardPage() {
-  const { token } = useToken();
+  const { token, ready } = useToken();
   const { data: client, loading, error } = useClientInfo(token);
   const { data: rates } = useCurrencyRates();
   const router = useRouter();
 
   useEffect(() => {
-    if (!token && !loading) router.replace("/settings");
-  }, [token, loading, router]);
+    if (ready && !token) router.replace("/settings");
+  }, [ready, token, router]);
 
-  if (loading) {
+  if (!ready || loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-pulse text-gray-400">Завантаження даних...</div>

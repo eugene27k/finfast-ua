@@ -47,10 +47,12 @@ function setCache<T>(storageKey: string, cacheKey: string, data: T) {
 
 export function useToken() {
   const [token, setTokenState] = useState<string>("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem(TOKEN_KEY);
     if (saved) setTokenState(saved);
+    setReady(true);
   }, []);
 
   const setToken = (t: string) => {
@@ -64,7 +66,7 @@ export function useToken() {
     setTokenState("");
   };
 
-  return { token, setToken, clearToken };
+  return { token, setToken, clearToken, ready };
 }
 
 export function useClientInfo(token: string) {

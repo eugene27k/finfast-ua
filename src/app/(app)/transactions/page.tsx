@@ -8,7 +8,7 @@ import AccountCard from "@/components/AccountCard";
 import { formatAmount } from "@/lib/currency";
 
 function TransactionsContent() {
-  const { token } = useToken();
+  const { token, ready } = useToken();
   const searchParams = useSearchParams();
   const router = useRouter();
   const { data: client } = useClientInfo(token);
@@ -46,10 +46,10 @@ function TransactionsContent() {
     .reduce((s, tx) => s + Math.abs(tx.amount), 0);
 
   useEffect(() => {
-    if (!token) router.replace("/settings");
-  }, [token, router]);
+    if (ready && !token) router.replace("/settings");
+  }, [ready, token, router]);
 
-  if (!token) return null;
+  if (!ready || !token) return null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
