@@ -2,9 +2,10 @@
 
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useToken, useClientInfo, useStatement, useMultiStatement } from "@/lib/hooks";
+import { useToken, useClientInfo, useAllStatements } from "@/lib/hooks";
 import TransactionRow from "@/components/TransactionRow";
 import AccountFilter from "@/components/AccountFilter";
+import RefreshButton from "@/components/RefreshButton";
 import { formatAmount } from "@/lib/currency";
 
 function TransactionsContent() {
@@ -26,28 +27,21 @@ function TransactionsContent() {
     [period]
   );
 
-  const allAccounts = client?.accounts || [];
-  const isAllSelected = selectedAccounts.length === 0;
-  const effectiveIds = isAllSelected
-    ? allAccounts.map((a) => a.id)
-    : selectedAccounts;
-
-  // Use single-account hook when one selected, multi when many
-  const singleId = effectiveIds.length === 1 ? effectiveIds[0] : "";
-  const { data: singleData, loading: singleLoading, error: singleError } = useStatement(
-    token,
-    singleId,
-    from
+  const allAccountIds = useMemo(
+    () => (client?.accounts || []).map((a) => a.id),
+    [client]
   );
-  const { data: multiData, loading: multiLoading, error: multiError } = useMultiStatement(
+
+  const { loading, error, refresh, getFiltered } = useAllStatements(
     token,
-    effectiveIds.length > 1 ? effectiveIds : [],
+    allAccountIds,
     from
   );
 
-  const transactions = effectiveIds.length === 1 ? singleData : multiData;
-  const loading = effectiveIds.length === 1 ? singleLoading : multiLoading;
-  const error = effectiveIds.length === 1 ? singleError : multiError;
+  const transactions = useMemo(
+    () => getFiltered(selectedAccounts),
+    [getFiltered, selectedAccounts]
+  );
 
   const filtered = useMemo(() => {
     if (!search) return transactions;
@@ -59,7 +53,7 @@ function TransactionsContent() {
     );
   }, [transactions, search]);
 
-  const currencyCode = allAccounts[0]?.currencyCode || 980;
+  const currencyCode = client?.accounts[0]?.currencyCode || 980;
 
   const totalIncome = filtered
     .filter((tx) => tx.amount > 0)
@@ -76,11 +70,14 @@ function TransactionsContent() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Транзакції</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">Транзакції</h1>
+        <RefreshButton onClick={refresh} loading={loading} />
+      </div>
 
       {client && (
         <AccountFilter
-          accounts={allAccounts}
+          accounts={client.accounts}
           selectedIds={selectedAccounts}
           onSelectionChange={setSelectedAccounts}
           hideEmpty={hideEmpty}

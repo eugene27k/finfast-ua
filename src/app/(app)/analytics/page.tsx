@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useToken, useClientInfo, useStatement, useMultiStatement } from "@/lib/hooks";
+import { useToken, useClientInfo, useAllStatements } from "@/lib/hooks";
 import SpendingChart from "@/components/SpendingChart";
 import DailyChart from "@/components/DailyChart";
 import AccountFilter from "@/components/AccountFilter";
+import RefreshButton from "@/components/RefreshButton";
 import { getMccCategory, getCategoryColor } from "@/lib/mcc";
 import { formatAmount } from "@/lib/currency";
 import { useRouter } from "next/navigation";
@@ -23,24 +24,23 @@ export default function AnalyticsPage() {
     [period]
   );
 
-  const allAccounts = client?.accounts || [];
-  const isAllSelected = selectedAccounts.length === 0;
-  const effectiveIds = isAllSelected
-    ? allAccounts.map((a) => a.id)
-    : selectedAccounts;
+  const allAccountIds = useMemo(
+    () => (client?.accounts || []).map((a) => a.id),
+    [client]
+  );
 
-  const currencyCode = allAccounts[0]?.currencyCode || 980;
+  const currencyCode = client?.accounts[0]?.currencyCode || 980;
 
-  const singleId = effectiveIds.length === 1 ? effectiveIds[0] : "";
-  const { data: singleData, loading: singleLoading } = useStatement(token, singleId, from);
-  const { data: multiData, loading: multiLoading } = useMultiStatement(
+  const { loading, refresh, getFiltered } = useAllStatements(
     token,
-    effectiveIds.length > 1 ? effectiveIds : [],
+    allAccountIds,
     from
   );
 
-  const transactions = effectiveIds.length === 1 ? singleData : multiData;
-  const loading = effectiveIds.length === 1 ? singleLoading : multiLoading;
+  const transactions = useMemo(
+    () => getFiltered(selectedAccounts),
+    [getFiltered, selectedAccounts]
+  );
 
   const categoryBreakdown = useMemo(() => {
     const expenses = transactions.filter((tx) => tx.amount < 0);
@@ -67,12 +67,15 @@ export default function AnalyticsPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Аналітика витрат</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">Аналітика витрат</h1>
+        <RefreshButton onClick={refresh} loading={loading} />
+      </div>
 
       <div className="space-y-3">
         {client && (
           <AccountFilter
-            accounts={allAccounts}
+            accounts={client.accounts}
             selectedIds={selectedAccounts}
             onSelectionChange={setSelectedAccounts}
             hideEmpty={hideEmpty}

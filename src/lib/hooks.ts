@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type {
   MonobankClientInfo,
   MonobankStatement,
@@ -9,11 +9,11 @@ import type {
 
 const TOKEN_KEY = "finfast_mono_token";
 const CLIENT_CACHE_KEY = "finfast_client_info";
-const CLIENT_CACHE_TTL = 60_000; // 60 seconds (Monobank rate limit)
-const STATEMENT_CACHE_KEY = "finfast_statements";
-const STATEMENT_CACHE_TTL = 60_000;
+const CLIENT_CACHE_TTL = 60_000;
+const STATEMENT_CACHE_KEY = "finfast_stmt";
+const STATEMENT_CACHE_TTL = 5 * 60_000; // 5 min — load once, filter locally
 const CURRENCY_CACHE_KEY = "finfast_currency";
-const CURRENCY_CACHE_TTL = 5 * 60_000; // 5 minutes
+const CURRENCY_CACHE_TTL = 5 * 60_000;
 
 interface CacheEntry<T> {
   data: T;
@@ -112,6 +112,99 @@ export function useClientInfo(token: string) {
   return { data, loading, error, refetch: () => fetch_(true) };
 }
 
+// Fetches statements for ALL accounts once, caches per-account.
+// Filtering by selected accounts is done locally via `filtered`.
+export function useAllStatements(
+  token: string,
+  accountIds: string[],
+  from: number,
+  to?: number
+) {
+  // allData: map of accountId -> statements
+  const [allData, setAllData] = useState<Record<string, MonobankStatement[]>>({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const idsKey = [...accountIds].sort().join(",");
+
+  const fetchAll = useCallback(async (skipCache = false) => {
+    if (!token || accountIds.length === 0) {
+      setAllData({});
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    const result: Record<string, MonobankStatement[]> = {};
+
+    try {
+      for (const accId of accountIds) {
+        const storageKey = `${STATEMENT_CACHE_KEY}_${accId}`;
+        const cacheKey = `${accId}:${from}:${to || ""}`;
+
+        if (!skipCache) {
+          const cached = getCache<MonobankStatement[]>(storageKey, cacheKey, STATEMENT_CACHE_TTL);
+          if (cached) {
+            result[accId] = cached;
+            continue;
+          }
+        }
+
+        const params = new URLSearchParams({
+          account: accId,
+          from: String(from),
+        });
+        if (to) params.set("to", String(to));
+
+        const res = await fetch(`/api/monobank/statement?${params}`, {
+          headers: { "x-mono-token": token },
+        });
+
+        if (res.status === 429) {
+          // Rate limited — use whatever we already have, stop fetching
+          break;
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          result[accId] = data;
+          setCache(storageKey, cacheKey, data);
+        }
+
+        // Small delay between requests to avoid rate limiting
+        if (accountIds.indexOf(accId) < accountIds.length - 1) {
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
+      setAllData(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, idsKey, from, to]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  return {
+    allData,
+    loading,
+    error,
+    refresh: () => fetchAll(true),
+    // Helper: get filtered+merged transactions for selected account IDs
+    getFiltered: (selectedIds: string[]): MonobankStatement[] => {
+      const ids = selectedIds.length === 0 ? accountIds : selectedIds;
+      return ids
+        .flatMap((id) => allData[id] || [])
+        .sort((a, b) => b.time - a.time);
+    },
+  };
+}
+
+// Keep simple single-account hook for dashboard budget alerts
 export function useStatement(token: string, accountId: string, from: number, to?: number) {
   const [data, setData] = useState<MonobankStatement[]>([]);
   const [loading, setLoading] = useState(false);
@@ -162,64 +255,6 @@ export function useStatement(token: string, accountId: string, from: number, to?
   }, [fetch_]);
 
   return { data, loading, error, refetch: () => fetch_(true) };
-}
-
-export function useMultiStatement(token: string, accountIds: string[], from: number, to?: number) {
-  const [data, setData] = useState<MonobankStatement[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const idsKey = accountIds.sort().join(",");
-
-  const fetch_ = useCallback(async () => {
-    if (!token || accountIds.length === 0) {
-      setData([]);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      const results: MonobankStatement[][] = [];
-      for (const accId of accountIds) {
-        const storageKey = `${STATEMENT_CACHE_KEY}_${accId}`;
-        const cacheKey = `${accId}:${from}:${to || ""}`;
-        const cached = getCache<MonobankStatement[]>(storageKey, cacheKey, STATEMENT_CACHE_TTL);
-
-        if (cached) {
-          results.push(cached);
-        } else {
-          const params = new URLSearchParams({
-            account: accId,
-            from: String(from),
-          });
-          if (to) params.set("to", String(to));
-
-          const res = await fetch(`/api/monobank/statement?${params}`, {
-            headers: { "x-mono-token": token },
-          });
-          if (res.ok) {
-            const result = await res.json();
-            results.push(result);
-            setCache(storageKey, cacheKey, result);
-          }
-        }
-      }
-      const merged = results.flat().sort((a, b) => b.time - a.time);
-      setData(merged);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, idsKey, from, to]);
-
-  useEffect(() => {
-    fetch_();
-  }, [fetch_]);
-
-  return { data, loading, error };
 }
 
 export function useCurrencyRates() {

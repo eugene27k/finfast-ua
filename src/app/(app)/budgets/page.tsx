@@ -2,12 +2,13 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useToken, useClientInfo, useStatement, useMultiStatement } from "@/lib/hooks";
+import { useToken, useClientInfo, useAllStatements } from "@/lib/hooks";
 import { useBudgets, getBudgetStatuses } from "@/lib/budgets";
 import { CATEGORY_NAMES } from "@/lib/mcc";
 import { getCurrencyInfo } from "@/lib/currency";
 import BudgetProgressCard from "@/components/BudgetProgressCard";
 import AccountFilter from "@/components/AccountFilter";
+import RefreshButton from "@/components/RefreshButton";
 
 export default function BudgetsPage() {
   const { token, ready: tokenReady } = useToken();
@@ -33,24 +34,23 @@ export default function BudgetsPage() {
     [now.getMonth(), now.getFullYear()]
   );
 
-  const allAccounts = client?.accounts || [];
-  const isAllSelected = selectedAccounts.length === 0;
-  const effectiveIds = isAllSelected
-    ? allAccounts.map((a) => a.id)
-    : selectedAccounts;
+  const allAccountIds = useMemo(
+    () => (client?.accounts || []).map((a) => a.id),
+    [client]
+  );
 
-  const currencyCode = allAccounts[0]?.currencyCode || 980;
+  const currencyCode = client?.accounts[0]?.currencyCode || 980;
 
-  const singleId = effectiveIds.length === 1 ? effectiveIds[0] : "";
-  const { data: singleData, loading: singleLoading } = useStatement(token, singleId, monthStart);
-  const { data: multiData, loading: multiLoading } = useMultiStatement(
+  const { loading, refresh, getFiltered } = useAllStatements(
     token,
-    effectiveIds.length > 1 ? effectiveIds : [],
+    allAccountIds,
     monthStart
   );
 
-  const transactions = effectiveIds.length === 1 ? singleData : multiData;
-  const loading = effectiveIds.length === 1 ? singleLoading : multiLoading;
+  const transactions = useMemo(
+    () => getFiltered(selectedAccounts),
+    [getFiltered, selectedAccounts]
+  );
 
   const statuses = useMemo(
     () => getBudgetStatuses(budgets, transactions),
@@ -105,18 +105,21 @@ export default function BudgetsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Бюджети</h1>
           <p className="text-sm text-gray-500 mt-1 capitalize">{monthName}</p>
         </div>
-        <button
-          onClick={openAddForm}
-          disabled={availableCategories.length === 0}
-          className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          + Додати бюджет
-        </button>
+        <div className="flex items-center gap-2">
+          <RefreshButton onClick={refresh} loading={loading} />
+          <button
+            onClick={openAddForm}
+            disabled={availableCategories.length === 0}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            + Додати бюджет
+          </button>
+        </div>
       </div>
 
       {client && (
         <AccountFilter
-          accounts={allAccounts}
+          accounts={client.accounts}
           selectedIds={selectedAccounts}
           onSelectionChange={setSelectedAccounts}
           hideEmpty={hideEmpty}
