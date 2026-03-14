@@ -112,6 +112,14 @@ export function useClientInfo(token: string) {
   return { data, loading, error, refetch: () => fetch_(true) };
 }
 
+export interface FetchResult {
+  status: "success" | "partial" | "rate_limited" | "error" | "cache";
+  loaded: number;
+  total: number;
+  txCount: number;
+  errorMessage?: string;
+}
+
 // Fetches statements for ALL accounts once, caches per-account.
 // Filtering by selected accounts is done locally via `filtered`.
 export function useAllStatements(
@@ -124,6 +132,7 @@ export function useAllStatements(
   const [allData, setAllData] = useState<Record<string, MonobankStatement[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<FetchResult | null>(null);
 
   const idsKey = [...accountIds].sort().join(",");
 
@@ -135,7 +144,12 @@ export function useAllStatements(
 
     setLoading(true);
     setError(null);
+    setLastResult(null);
     const result: Record<string, MonobankStatement[]> = {};
+    let rateLimited = false;
+    let allFromCache = true;
+    let fetchedCount = 0;
+    let apiError: string | null = null;
 
     try {
       for (const accId of accountIds) {
@@ -146,10 +160,12 @@ export function useAllStatements(
           const cached = getCache<MonobankStatement[]>(storageKey, cacheKey, STATEMENT_CACHE_TTL);
           if (cached) {
             result[accId] = cached;
+            fetchedCount++;
             continue;
           }
         }
 
+        allFromCache = false;
         const params = new URLSearchParams({
           account: accId,
           from: String(from),
@@ -161,7 +177,7 @@ export function useAllStatements(
         });
 
         if (res.status === 429) {
-          // Rate limited — keep existing data for accounts we didn't fetch
+          rateLimited = true;
           break;
         }
 
@@ -169,6 +185,14 @@ export function useAllStatements(
           const data = await res.json();
           result[accId] = data;
           setCache(storageKey, cacheKey, data);
+          fetchedCount++;
+        } else {
+          try {
+            const err = await res.json();
+            apiError = err.error || `HTTP ${res.status}`;
+          } catch {
+            apiError = `HTTP ${res.status}`;
+          }
         }
 
         // Small delay between requests to avoid rate limiting
@@ -176,13 +200,30 @@ export function useAllStatements(
           await new Promise((r) => setTimeout(r, 500));
         }
       }
+
       // Merge: update accounts we fetched, keep previous data for the rest
       setAllData((prev) => {
         if (Object.keys(result).length === 0) return prev;
         return { ...prev, ...result };
       });
+
+      const txCount = Object.values(result).reduce((s, arr) => s + arr.length, 0);
+
+      if (rateLimited) {
+        setLastResult({ status: "rate_limited", loaded: fetchedCount, total: accountIds.length, txCount });
+      } else if (apiError) {
+        setLastResult({ status: "error", loaded: fetchedCount, total: accountIds.length, txCount, errorMessage: apiError });
+      } else if (allFromCache) {
+        setLastResult({ status: "cache", loaded: fetchedCount, total: accountIds.length, txCount });
+      } else if (fetchedCount < accountIds.length) {
+        setLastResult({ status: "partial", loaded: fetchedCount, total: accountIds.length, txCount });
+      } else {
+        setLastResult({ status: "success", loaded: fetchedCount, total: accountIds.length, txCount });
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      setError(msg);
+      setLastResult({ status: "error", loaded: 0, total: accountIds.length, txCount: 0, errorMessage: msg });
     } finally {
       setLoading(false);
     }
@@ -208,6 +249,7 @@ export function useAllStatements(
     allData,
     loading,
     error,
+    lastResult,
     refresh: () => fetchAll(true),
     getFiltered,
   };

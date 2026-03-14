@@ -2,10 +2,11 @@
 
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useToken, useClientInfo, useAllStatements } from "@/lib/hooks";
+import { useToken, useClientInfo, useAllStatements, type FetchResult } from "@/lib/hooks";
 import TransactionRow from "@/components/TransactionRow";
 import AccountFilter from "@/components/AccountFilter";
 import RefreshButton from "@/components/RefreshButton";
+import { useToast } from "@/components/Toast";
 import { formatAmount } from "@/lib/currency";
 
 function TransactionsContent() {
@@ -32,11 +33,48 @@ function TransactionsContent() {
     [client]
   );
 
-  const { loading, error, refresh, getFiltered } = useAllStatements(
+  const { toast } = useToast();
+  const { loading, error, lastResult, refresh, getFiltered } = useAllStatements(
     token,
     allAccountIds,
     from
   );
+
+  const prevResultRef = useMemo(() => ({ current: null as FetchResult | null }), []);
+  useEffect(() => {
+    if (!lastResult || lastResult === prevResultRef.current) return;
+    prevResultRef.current = lastResult;
+
+    switch (lastResult.status) {
+      case "success":
+        toast(
+          `Завантажено ${lastResult.txCount} транзакцій з ${lastResult.loaded} рахунків`,
+          "success"
+        );
+        break;
+      case "cache":
+        // Silent — data from cache, no need to notify
+        break;
+      case "rate_limited":
+        toast(
+          `API ліміт — завантажено ${lastResult.loaded}/${lastResult.total} рахунків. Спробуйте через хвилину.`,
+          "error"
+        );
+        break;
+      case "partial":
+        toast(
+          `Частково завантажено: ${lastResult.loaded}/${lastResult.total} рахунків`,
+          "error"
+        );
+        break;
+      case "error":
+        toast(
+          `Помилка API: ${lastResult.errorMessage || "невідома помилка"}`,
+          "error"
+        );
+        break;
+    }
+  }, [lastResult, toast, prevResultRef]);
 
   const transactions = useMemo(
     () => getFiltered(selectedAccounts),
