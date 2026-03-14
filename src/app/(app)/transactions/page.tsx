@@ -86,6 +86,63 @@ function LoadingProgress({
   );
 }
 
+function CooldownBanner({
+  cooldownLeft,
+  loaded,
+  total,
+  onRetry,
+}: {
+  cooldownLeft: number;
+  loaded: number;
+  total: number;
+  onRetry: () => void;
+}) {
+  const pct = Math.round(((60 - cooldownLeft) / 60) * 100);
+
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+      <div className="flex items-start gap-3">
+        <div className="text-amber-500 mt-0.5 shrink-0">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-amber-800">
+            API ліміт Monobank
+          </p>
+          <p className="text-sm text-amber-700 mt-0.5">
+            Завантажено {loaded} з {total} рахунків. Monobank обмежує частоту запитів — потрібно зачекати.
+          </p>
+          <div className="mt-3">
+            {cooldownLeft > 0 ? (
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-amber-600">
+                  <span>Повторна спроба через</span>
+                  <span>{cooldownLeft} сек</span>
+                </div>
+                <div className="w-full bg-amber-100 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-amber-400 h-1.5 rounded-full transition-all duration-1000"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={onRetry}
+                className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 text-sm rounded-lg transition-colors"
+              >
+                Спробувати знову
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TransactionsContent() {
   const { token, ready } = useToken();
   const searchParams = useSearchParams();
@@ -111,7 +168,7 @@ function TransactionsContent() {
   );
 
   const { toast } = useToast();
-  const { loading, progress, error, lastResult, refresh, getFiltered } = useAllStatements(
+  const { loading, progress, cooldownLeft, error, lastResult, refresh, getFiltered } = useAllStatements(
     token,
     allAccountIds,
     from
@@ -133,10 +190,7 @@ function TransactionsContent() {
         // Silent — data from cache, no need to notify
         break;
       case "rate_limited":
-        toast(
-          `API ліміт — завантажено ${lastResult.loaded}/${lastResult.total} рахунків. Спробуйте через хвилину.`,
-          "error"
-        );
+        // Handled by CooldownBanner — no need for toast
         break;
       case "partial":
         toast(
@@ -146,7 +200,7 @@ function TransactionsContent() {
         break;
       case "error":
         toast(
-          `Помилка API: ${lastResult.errorMessage || "невідома помилка"}`,
+          `Помилка: ${lastResult.errorMessage || "невідома помилка"}`,
           "error"
         );
         break;
@@ -183,11 +237,18 @@ function TransactionsContent() {
 
   if (!ready || !token) return null;
 
+  const isRateLimited = lastResult?.status === "rate_limited";
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Транзакції</h1>
-        <RefreshButton onClick={refresh} loading={loading} />
+        <RefreshButton
+          onClick={refresh}
+          loading={loading}
+          disabled={cooldownLeft > 0}
+          cooldownLeft={cooldownLeft}
+        />
       </div>
 
       {client && (
@@ -228,6 +289,15 @@ function TransactionsContent() {
           className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm flex-1 min-w-[200px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
       </div>
+
+      {isRateLimited && (
+        <CooldownBanner
+          cooldownLeft={cooldownLeft}
+          loaded={lastResult.loaded}
+          total={lastResult.total}
+          onRetry={refresh}
+        />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-xl border border-gray-200">

@@ -29,6 +29,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+
+    // Detect Monobank 429 rate limit and proxy status correctly
+    if (message.includes("429")) {
+      return NextResponse.json(
+        { error: "Too many requests", rateLimited: true },
+        { status: 429 }
+      );
+    }
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

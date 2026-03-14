@@ -126,6 +126,8 @@ export interface FetchResult {
   errorMessage?: string;
 }
 
+const RATE_LIMIT_COOLDOWN = 60; // Monobank rate limit: 60 seconds
+
 // Fetches statements for ALL accounts once, caches per-account.
 // Filtering by selected accounts is done locally via `filtered`.
 export function useAllStatements(
@@ -140,8 +142,24 @@ export function useAllStatements(
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<FetchResult | null>(null);
   const [progress, setProgress] = useState<FetchProgress | null>(null);
+  const [cooldownLeft, setCooldownLeft] = useState(0);
 
   const idsKey = [...accountIds].sort().join(",");
+
+  // Cooldown timer
+  useEffect(() => {
+    if (cooldownLeft <= 0) return;
+    const interval = setInterval(() => {
+      setCooldownLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldownLeft]);
 
   const fetchAll = useCallback(async (skipCache = false) => {
     if (!token || accountIds.length === 0) {
@@ -189,6 +207,7 @@ export function useAllStatements(
 
         if (res.status === 429) {
           rateLimited = true;
+          setCooldownLeft(RATE_LIMIT_COOLDOWN);
           break;
         }
 
@@ -261,6 +280,7 @@ export function useAllStatements(
     allData,
     loading,
     progress,
+    cooldownLeft,
     error,
     lastResult,
     refresh: () => fetchAll(true),
