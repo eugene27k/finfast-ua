@@ -161,7 +161,7 @@ export function useAllStatements(
         });
 
         if (res.status === 429) {
-          // Rate limited — use whatever we already have, stop fetching
+          // Rate limited — keep existing data for accounts we didn't fetch
           break;
         }
 
@@ -176,7 +176,11 @@ export function useAllStatements(
           await new Promise((r) => setTimeout(r, 500));
         }
       }
-      setAllData(result);
+      // Merge: update accounts we fetched, keep previous data for the rest
+      setAllData((prev) => {
+        if (Object.keys(result).length === 0) return prev;
+        return { ...prev, ...result };
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -189,18 +193,23 @@ export function useAllStatements(
     fetchAll();
   }, [fetchAll]);
 
-  return {
-    allData,
-    loading,
-    error,
-    refresh: () => fetchAll(true),
-    // Helper: get filtered+merged transactions for selected account IDs
-    getFiltered: (selectedIds: string[]): MonobankStatement[] => {
+  const getFiltered = useCallback(
+    (selectedIds: string[]): MonobankStatement[] => {
       const ids = selectedIds.length === 0 ? accountIds : selectedIds;
       return ids
         .flatMap((id) => allData[id] || [])
         .sort((a, b) => b.time - a.time);
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allData, idsKey]
+  );
+
+  return {
+    allData,
+    loading,
+    error,
+    refresh: () => fetchAll(true),
+    getFiltered,
   };
 }
 
