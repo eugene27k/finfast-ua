@@ -176,8 +176,10 @@ export function useCurrencyRates() {
     fetch("/api/monobank/currency")
       .then((r) => r.json())
       .then((result) => {
-        setData(result);
-        setCache(CURRENCY_CACHE_KEY, "rates", result);
+        if (Array.isArray(result)) {
+          setData(result);
+          setCache(CURRENCY_CACHE_KEY, "rates", result);
+        }
       })
       .finally(() => setLoading(false));
   }, []);
