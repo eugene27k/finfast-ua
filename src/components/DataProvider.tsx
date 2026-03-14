@@ -77,6 +77,7 @@ interface DataContextValue {
   from: number;
   refresh: () => void;
   getFiltered: (selectedIds: string[]) => MonobankStatement[];
+  lastRefreshedAt: Date | null;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -178,6 +179,7 @@ export default function DataProvider({
   const [statementsLoading, setStatementsLoading] = useState(false);
   const [statementsError, setStatementsError] = useState<string | null>(null);
   const [progress, setProgress] = useState<FetchProgress | null>(null);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
   const fetchStatements = useCallback(
     async (skipCache = false) => {
@@ -243,6 +245,7 @@ export default function DataProvider({
           Object.keys(result).length === 0 ? prev : { ...prev, ...result }
         );
         setProgress(null);
+        setLastRefreshedAt(new Date());
       } catch (e) {
         setStatementsError(
           e instanceof Error ? e.message : "Unknown error"
@@ -292,6 +295,7 @@ export default function DataProvider({
       from,
       refresh,
       getFiltered,
+      lastRefreshedAt,
     }),
     [
       token,
@@ -308,6 +312,7 @@ export default function DataProvider({
       from,
       refresh,
       getFiltered,
+      lastRefreshedAt,
     ]
   );
 

@@ -18,6 +18,7 @@ export default function AnalyticsPage() {
     statementsLoading: loading,
     refresh,
     getFiltered,
+    lastRefreshedAt,
   } = useData();
   const router = useRouter();
 
@@ -64,7 +65,7 @@ export default function AnalyticsPage() {
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Аналітика витрат</h1>
-        <RefreshButton onClick={refresh} loading={loading} />
+        <RefreshButton onClick={refresh} loading={loading} lastRefreshedAt={lastRefreshedAt} />
       </div>
 
       <div className="space-y-3">

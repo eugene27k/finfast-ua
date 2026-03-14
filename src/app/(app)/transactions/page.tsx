@@ -96,6 +96,7 @@ function TransactionsContent() {
     from,
     refresh,
     getFiltered,
+    lastRefreshedAt,
   } = useData();
 
   const searchParams = useSearchParams();
@@ -148,7 +149,7 @@ function TransactionsContent() {
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Транзакції</h1>
-        <RefreshButton onClick={refresh} loading={loading} />
+        <RefreshButton onClick={refresh} loading={loading} lastRefreshedAt={lastRefreshedAt} />
       </div>
 
       {client && (

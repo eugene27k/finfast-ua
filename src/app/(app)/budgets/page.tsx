@@ -18,6 +18,7 @@ export default function BudgetsPage() {
     statementsLoading: loading,
     refresh,
     getFiltered,
+    lastRefreshedAt,
   } = useData();
   const { budgets, ready: budgetsReady, setBudget, removeBudget } = useBudgets();
   const router = useRouter();
@@ -101,7 +102,7 @@ export default function BudgetsPage() {
           <p className="text-sm text-gray-500 mt-1 capitalize">{monthName}</p>
         </div>
         <div className="flex items-center gap-2">
-          <RefreshButton onClick={refresh} loading={loading} />
+          <RefreshButton onClick={refresh} loading={loading} lastRefreshedAt={lastRefreshedAt} />
           <button
             onClick={openAddForm}
             disabled={availableCategories.length === 0}
