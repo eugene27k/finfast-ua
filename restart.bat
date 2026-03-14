@@ -6,9 +6,7 @@ echo.
 echo Installing dependencies...
 npm install
 echo.
-echo Opening app in browser...
-start http://localhost:3000
-echo.
 echo Starting dev server...
+start "" cmd /c "timeout /t 5 /nobreak >nul && start http://localhost:3000"
 npm run dev
 pause
