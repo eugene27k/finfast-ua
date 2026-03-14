@@ -6,6 +6,9 @@ echo.
 echo Installing dependencies...
 npm install
 echo.
+echo Opening app in browser...
+start http://localhost:3000
+echo.
 echo Starting dev server...
 npm run dev
 pause
