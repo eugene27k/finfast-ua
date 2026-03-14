@@ -112,6 +112,12 @@ export function useClientInfo(token: string) {
   return { data, loading, error, refetch: () => fetch_(true) };
 }
 
+export interface FetchProgress {
+  current: number;
+  total: number;
+  currentAccountId: string;
+}
+
 export interface FetchResult {
   status: "success" | "partial" | "rate_limited" | "error" | "cache";
   loaded: number;
@@ -133,6 +139,7 @@ export function useAllStatements(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<FetchResult | null>(null);
+  const [progress, setProgress] = useState<FetchProgress | null>(null);
 
   const idsKey = [...accountIds].sort().join(",");
 
@@ -145,6 +152,7 @@ export function useAllStatements(
     setLoading(true);
     setError(null);
     setLastResult(null);
+    setProgress(null);
     const result: Record<string, MonobankStatement[]> = {};
     let rateLimited = false;
     let allFromCache = true;
@@ -152,7 +160,8 @@ export function useAllStatements(
     let apiError: string | null = null;
 
     try {
-      for (const accId of accountIds) {
+      for (let i = 0; i < accountIds.length; i++) {
+        const accId = accountIds[i];
         const storageKey = `${STATEMENT_CACHE_KEY}_${accId}`;
         const cacheKey = `${accId}:${from}:${to || ""}`;
 
@@ -166,6 +175,8 @@ export function useAllStatements(
         }
 
         allFromCache = false;
+        setProgress({ current: i + 1, total: accountIds.length, currentAccountId: accId });
+
         const params = new URLSearchParams({
           account: accId,
           from: String(from),
@@ -196,11 +207,12 @@ export function useAllStatements(
         }
 
         // Small delay between requests to avoid rate limiting
-        if (accountIds.indexOf(accId) < accountIds.length - 1) {
+        if (i < accountIds.length - 1) {
           await new Promise((r) => setTimeout(r, 500));
         }
       }
 
+      setProgress(null);
       // Merge: update accounts we fetched, keep previous data for the rest
       setAllData((prev) => {
         if (Object.keys(result).length === 0) return prev;
@@ -248,6 +260,7 @@ export function useAllStatements(
   return {
     allData,
     loading,
+    progress,
     error,
     lastResult,
     refresh: () => fetchAll(true),

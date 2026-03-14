@@ -2,12 +2,89 @@
 
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useToken, useClientInfo, useAllStatements, type FetchResult } from "@/lib/hooks";
+import { useToken, useClientInfo, useAllStatements, type FetchResult, type FetchProgress } from "@/lib/hooks";
 import TransactionRow from "@/components/TransactionRow";
 import AccountFilter from "@/components/AccountFilter";
 import RefreshButton from "@/components/RefreshButton";
 import { useToast } from "@/components/Toast";
-import { formatAmount } from "@/lib/currency";
+import { formatAmount, getCurrencyInfo } from "@/lib/currency";
+import type { MonobankAccount } from "@/types/monobank";
+
+const TYPE_LABELS: Record<string, string> = {
+  black: "Чорна",
+  white: "Біла",
+  platinum: "Platinum",
+  iron: "Iron",
+  fop: "ФОП",
+  yellow: "Жовта",
+  eAid: "єПідтримка",
+};
+
+function getAccountLabel(acc: MonobankAccount): string {
+  const label = TYPE_LABELS[acc.type] || acc.type;
+  const pan = acc.maskedPan[0];
+  const suffix = pan ? ` •${pan.slice(-4)}` : "";
+  const cur = getCurrencyInfo(acc.currencyCode).code;
+  return `${label}${suffix} (${cur})`;
+}
+
+function LoadingProgress({
+  progress,
+  accounts,
+}: {
+  progress: FetchProgress | null;
+  accounts: MonobankAccount[];
+}) {
+  const currentAccount = progress
+    ? accounts.find((a) => a.id === progress.currentAccountId)
+    : null;
+  const pct = progress ? Math.round((progress.current / progress.total) * 100) : 0;
+
+  return (
+    <div className="p-8 flex flex-col items-center gap-4">
+      <div className="relative w-10 h-10">
+        <svg className="w-10 h-10 animate-spin" viewBox="0 0 24 24" fill="none">
+          <circle
+            cx="12" cy="12" r="10"
+            stroke="currentColor"
+            strokeWidth="3"
+            className="text-gray-200"
+          />
+          <path
+            d="M12 2a10 10 0 0 1 10 10"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            className="text-blue-500"
+          />
+        </svg>
+      </div>
+      {progress ? (
+        <>
+          <div className="w-full max-w-xs">
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>Рахунок {progress.current} з {progress.total}</span>
+              <span>{pct}%</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+          {currentAccount && (
+            <p className="text-sm text-gray-500">
+              Завантаження: {getAccountLabel(currentAccount)}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-gray-400">Підготовка до завантаження...</p>
+      )}
+    </div>
+  );
+}
 
 function TransactionsContent() {
   const { token, ready } = useToken();
@@ -34,7 +111,7 @@ function TransactionsContent() {
   );
 
   const { toast } = useToast();
-  const { loading, error, lastResult, refresh, getFiltered } = useAllStatements(
+  const { loading, progress, error, lastResult, refresh, getFiltered } = useAllStatements(
     token,
     allAccountIds,
     from
@@ -173,9 +250,7 @@ function TransactionsContent() {
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-gray-400 animate-pulse">
-            Завантаження транзакцій...
-          </div>
+          <LoadingProgress progress={progress} accounts={client?.accounts || []} />
         ) : error ? (
           <div className="p-4 text-red-600 text-sm">{error}</div>
         ) : filtered.length === 0 ? (
