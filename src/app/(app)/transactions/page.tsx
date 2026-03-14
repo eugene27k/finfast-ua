@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, Suspense } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useToken, useClientInfo, useStatement } from "@/lib/hooks";
 import TransactionRow from "@/components/TransactionRow";
@@ -45,10 +45,11 @@ function TransactionsContent() {
     .filter((tx) => tx.amount < 0)
     .reduce((s, tx) => s + Math.abs(tx.amount), 0);
 
-  if (!token) {
-    router.replace("/settings");
-    return null;
-  }
+  useEffect(() => {
+    if (!token) router.replace("/settings");
+  }, [token, router]);
+
+  if (!token) return null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useToken, useClientInfo, useStatement } from "@/lib/hooks";
 import SpendingChart from "@/components/SpendingChart";
 import DailyChart from "@/components/DailyChart";
@@ -45,10 +45,11 @@ export default function AnalyticsPage() {
 
   const totalExpenses = categoryBreakdown.reduce((s, c) => s + c.total, 0);
 
-  if (!token) {
-    router.replace("/settings");
-    return null;
-  }
+  useEffect(() => {
+    if (!token) router.replace("/settings");
+  }, [token, router]);
+
+  if (!token) return null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
