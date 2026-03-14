@@ -15,6 +15,8 @@ const MCC_CATEGORIES: Record<string, [number, number][]> = {
   "Спорт": [[5941, 5941], [7941, 7941], [7911, 7911]],
 };
 
+export const CATEGORY_NAMES: string[] = [...Object.keys(MCC_CATEGORIES), "Інше"];
+
 export function getMccCategory(mcc: number): string {
   for (const [category, ranges] of Object.entries(MCC_CATEGORIES)) {
     for (const [from, to] of ranges) {

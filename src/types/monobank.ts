@@ -65,3 +65,11 @@ export interface SpendingCategory {
   total: number;
   count: number;
 }
+
+export interface BudgetStatus {
+  category: string;
+  limit: number;
+  spent: number;
+  percentage: number;
+  status: "ok" | "warning" | "exceeded";
+}

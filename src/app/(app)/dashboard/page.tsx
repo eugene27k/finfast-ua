@@ -1,7 +1,10 @@
 "use client";
 
-import { useToken, useClientInfo, useCurrencyRates } from "@/lib/hooks";
+import { useMemo } from "react";
+import { useToken, useClientInfo, useCurrencyRates, useStatement } from "@/lib/hooks";
+import { useBudgets, getBudgetStatuses } from "@/lib/budgets";
 import AccountCard from "@/components/AccountCard";
+import BudgetAlertBanner from "@/components/BudgetAlertBanner";
 import { getCurrencyInfo, formatAmount } from "@/lib/currency";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -10,7 +13,15 @@ export default function DashboardPage() {
   const { token, ready } = useToken();
   const { data: client, loading, error } = useClientInfo(token);
   const { data: rates } = useCurrencyRates();
+  const { budgets } = useBudgets();
   const router = useRouter();
+
+  const now = new Date();
+  const monthStart = useMemo(
+    () => Math.floor(new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [now.getMonth(), now.getFullYear()]
+  );
 
   useEffect(() => {
     if (ready && !token) router.replace("/settings");
@@ -32,6 +43,13 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  const firstUahAccountId = client?.accounts.find((a) => a.currencyCode === 980)?.id || "";
+  const { data: monthTransactions } = useStatement(token, firstUahAccountId, monthStart);
+  const budgetStatuses = useMemo(
+    () => getBudgetStatuses(budgets, monthTransactions),
+    [budgets, monthTransactions]
+  );
 
   if (!client) return null;
 
@@ -63,6 +81,8 @@ export default function DashboardPage() {
           {formatAmount(totalUah, 980)}
         </p>
       </div>
+
+      <BudgetAlertBanner statuses={budgetStatuses} currencyCode={980} />
 
       {mainRates.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
