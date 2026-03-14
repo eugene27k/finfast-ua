@@ -25,6 +25,13 @@ export default function DashboardPage() {
     [now.getMonth(), now.getFullYear()]
   );
 
+  const firstUahAccountId = client?.accounts.find((a) => a.currencyCode === 980)?.id || "";
+  const { data: monthTransactions } = useStatement(token, firstUahAccountId, monthStart);
+  const budgetStatuses = useMemo(
+    () => getBudgetStatuses(budgets, monthTransactions),
+    [budgets, monthTransactions]
+  );
+
   useEffect(() => {
     if (ready && !token) router.replace("/settings");
   }, [ready, token, router]);
@@ -45,13 +52,6 @@ export default function DashboardPage() {
       </div>
     );
   }
-
-  const firstUahAccountId = client?.accounts.find((a) => a.currencyCode === 980)?.id || "";
-  const { data: monthTransactions } = useStatement(token, firstUahAccountId, monthStart);
-  const budgetStatuses = useMemo(
-    () => getBudgetStatuses(budgets, monthTransactions),
-    [budgets, monthTransactions]
-  );
 
   if (!client) return null;
 
