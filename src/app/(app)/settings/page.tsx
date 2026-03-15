@@ -19,19 +19,19 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
-      <h1 className="text-2xl font-bold text-gray-900">Налаштування</h1>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Налаштування</h1>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-800">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
           Monobank API Token
         </h2>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
           Отримайте ваш персональний токен на{" "}
           <a
             href="https://api.monobank.ua/"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 hover:underline"
+            className="text-blue-600 dark:text-blue-400 hover:underline"
           >
             api.monobank.ua
           </a>
@@ -41,12 +41,12 @@ export default function SettingsPage() {
         {token ? (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <div className="flex-1 bg-gray-50 px-3 py-2 rounded-lg text-sm text-gray-600 font-mono">
+              <div className="flex-1 bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 font-mono">
                 {token.slice(0, 8)}{"•".repeat(20)}{token.slice(-4)}
               </div>
               <button
                 onClick={clearToken}
-                className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
               >
                 Видалити
               </button>
@@ -58,12 +58,12 @@ export default function SettingsPage() {
               </p>
             )}
             {error && (
-              <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm">
+              <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded-lg text-sm">
                 {error}
               </div>
             )}
             {client && (
-              <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm">
+              <div className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 p-3 rounded-lg text-sm">
                 Токен дійсний. Підключено до акаунту: <strong>{client.name}</strong>
                 <br />
                 Кількість рахунків: {client.accounts.length}
@@ -81,7 +81,7 @@ export default function SettingsPage() {
               value={inputToken}
               onChange={(e) => setInputToken(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSave()}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
             <button
               onClick={handleSave}
@@ -94,11 +94,11 @@ export default function SettingsPage() {
         )}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-800">Про додаток</h2>
-        <div className="text-sm text-gray-500 space-y-2">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Про додаток</h2>
+        <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
           <p>
-            <strong>FinFast UA</strong> — персональний додаток для управління
+            <strong className="text-gray-700 dark:text-gray-300">FinFast UA</strong> — персональний додаток для управління
             фінансами з інтеграцією Monobank API.
           </p>
           <ul className="list-disc list-inside space-y-1">
@@ -108,7 +108,7 @@ export default function SettingsPage() {
             <li>Графіки щоденних витрат та надходжень</li>
             <li>Курси валют Monobank</li>
           </ul>
-          <p className="text-xs text-gray-400 mt-4">
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-4">
             Дані не передаються на сервери третіх сторін. Токен зберігається
             виключно у localStorage вашого браузера.
           </p>

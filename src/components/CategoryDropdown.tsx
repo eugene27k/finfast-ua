@@ -88,7 +88,7 @@ export default function CategoryDropdown({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors group"
+        className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors group"
         title="Змінити категорію"
       >
         <span
@@ -99,7 +99,7 @@ export default function CategoryDropdown({
           {currentCategory}
         </span>
         <svg
-          className="w-3 h-3 text-gray-400 group-hover:text-gray-600"
+          className="w-3 h-3 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -110,9 +110,9 @@ export default function CategoryDropdown({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 w-64 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+        <div className="absolute left-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50 overflow-hidden">
           {saving && (
-            <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-10">
+            <div className="absolute inset-0 bg-white/70 dark:bg-gray-800/70 flex items-center justify-center z-10">
               <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
@@ -122,26 +122,24 @@ export default function CategoryDropdown({
             {isOverridden && (
               <button
                 onClick={() => handleSelect(null)}
-                className="w-full text-left px-3 py-2 text-xs text-blue-600 hover:bg-blue-50 border-b border-gray-100"
+                className="w-full text-left px-3 py-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-b border-gray-100 dark:border-gray-700"
               >
                 Скинути до авто-категорії (MCC)
               </button>
             )}
 
             {/* Mono categories */}
-            <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50">
+            <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-900">
               Категорії Mono
             </div>
             {monoCategories.map((name) => (
               <button
                 key={name}
                 onClick={() => {
-                  // For Mono categories — we don't create overrides, just reset
-                  // because MCC already maps to this category
                   handleSelect(null);
                 }}
-                className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 flex items-center gap-2 ${
-                  currentCategory === name && !isOverridden ? "bg-blue-50 text-blue-700" : "text-gray-700"
+                className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${
+                  currentCategory === name && !isOverridden ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400" : "text-gray-700 dark:text-gray-300"
                 }`}
               >
                 <span
@@ -155,15 +153,15 @@ export default function CategoryDropdown({
             {/* Custom categories */}
             {customCategories.length > 0 && (
               <>
-                <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 border-t border-gray-100">
+                <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
                   Ваші категорії
                 </div>
                 {customCategories.map((cat) => (
                   <button
                     key={cat.id}
                     onClick={() => handleSelect(cat.id)}
-                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 flex items-center gap-2 ${
-                      currentCategory === cat.name && isOverridden ? "bg-blue-50 text-blue-700" : "text-gray-700"
+                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${
+                      currentCategory === cat.name && isOverridden ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400" : "text-gray-700 dark:text-gray-300"
                     }`}
                   >
                     <span
@@ -177,7 +175,7 @@ export default function CategoryDropdown({
             )}
 
             {/* Create new */}
-            <div className="border-t border-gray-100">
+            <div className="border-t border-gray-100 dark:border-gray-700">
               {creating ? (
                 <div className="p-3 space-y-2">
                   <input
@@ -186,7 +184,7 @@ export default function CategoryDropdown({
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     autoFocus
                   />
                   <div className="flex gap-1.5 flex-wrap">
@@ -195,7 +193,7 @@ export default function CategoryDropdown({
                         key={c}
                         onClick={() => setNewColor(c)}
                         className={`w-5 h-5 rounded-full border-2 ${
-                          newColor === c ? "border-gray-800 scale-110" : "border-transparent"
+                          newColor === c ? "border-gray-800 dark:border-white scale-110" : "border-transparent"
                         }`}
                         style={{ backgroundColor: c }}
                       />
@@ -211,7 +209,7 @@ export default function CategoryDropdown({
                     </button>
                     <button
                       onClick={() => { setCreating(false); setNewName(""); }}
-                      className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+                      className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                     >
                       Скасувати
                     </button>
@@ -220,7 +218,7 @@ export default function CategoryDropdown({
               ) : (
                 <button
                   onClick={() => setCreating(true)}
-                  className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2"
+                  className="w-full text-left px-3 py-2 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />

@@ -99,8 +99,8 @@ export default function BudgetsPage() {
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Бюджети</h1>
-          <p className="text-sm text-gray-500 mt-1 capitalize">{monthName}</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Бюджети</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 capitalize">{monthName}</p>
         </div>
         <div className="flex items-center gap-2">
           <RefreshButton onClick={refresh} loading={loading} lastRefreshedAt={lastRefreshedAt} />
@@ -125,15 +125,15 @@ export default function BudgetsPage() {
       )}
 
       {showForm && (
-        <div className="bg-white p-4 rounded-xl border border-blue-200 shadow-sm space-y-3">
-          <h3 className="text-sm font-semibold text-gray-800">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-blue-200 dark:border-blue-800 shadow-sm space-y-3">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
             {editCategory ? "Редагувати бюджет" : "Новий бюджет"}
           </h3>
           <div className="flex flex-wrap gap-3">
             <select
               value={formCategory}
               onChange={(e) => setFormCategory(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {availableCategories.map((cat) => (
                 <option key={cat} value={cat}>
@@ -148,11 +148,11 @@ export default function BudgetsPage() {
                 value={formAmount}
                 onChange={(e) => setFormAmount(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                className="w-40 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-40 px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 min="0"
                 step="100"
               />
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
                 {getCurrencyInfo(currencyCode).symbol}
               </span>
             </div>
@@ -168,7 +168,7 @@ export default function BudgetsPage() {
                   setShowForm(false);
                   setEditCategory(null);
                 }}
-                className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
                 Скасувати
               </button>
@@ -182,7 +182,7 @@ export default function BudgetsPage() {
           Завантаження...
         </div>
       ) : statuses.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 text-center">
           <p className="text-gray-400 mb-2">Немає встановлених бюджетів</p>
           <p className="text-sm text-gray-400">
             Натисніть &quot;Додати бюджет&quot; щоб встановити ліміт витрат на категорію

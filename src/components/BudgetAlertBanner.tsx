@@ -21,12 +21,12 @@ export default function BudgetAlertBanner({
   if (alerts.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-800">Бюджети</h3>
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Бюджети</h3>
         <Link
           href="/budgets"
-          className="text-xs text-blue-600 hover:underline"
+          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
         >
           Переглянути всі
         </Link>
@@ -37,10 +37,10 @@ export default function BudgetAlertBanner({
             className="w-2.5 h-2.5 rounded-full shrink-0"
             style={{ backgroundColor: getCategoryColor(s.category) }}
           />
-          <span className="text-sm text-gray-700 min-w-[100px]">
+          <span className="text-sm text-gray-700 dark:text-gray-300 min-w-[100px]">
             {s.category}
           </span>
-          <div className="flex-1 bg-gray-100 rounded-full h-2">
+          <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2">
             <div
               className="h-2 rounded-full"
               style={{
@@ -52,7 +52,7 @@ export default function BudgetAlertBanner({
           </div>
           <span
             className={`text-xs font-medium whitespace-nowrap ${
-              s.status === "exceeded" ? "text-red-600" : "text-amber-600"
+              s.status === "exceeded" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
             }`}
           >
             {s.status === "exceeded"

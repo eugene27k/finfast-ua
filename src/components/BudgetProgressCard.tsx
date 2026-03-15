@@ -26,21 +26,21 @@ export default function BudgetProgressCard({
       : categoryColor;
 
   return (
-    <div className="bg-white p-4 rounded-xl border border-gray-200">
+    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div
             className="w-3 h-3 rounded-full shrink-0"
             style={{ backgroundColor: categoryColor }}
           />
-          <span className="text-sm font-semibold text-gray-900">
+          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             {status.category}
           </span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={onEdit}
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             title="Редагувати"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -49,7 +49,7 @@ export default function BudgetProgressCard({
           </button>
           <button
             onClick={onDelete}
-            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
             title="Видалити"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -59,7 +59,7 @@ export default function BudgetProgressCard({
         </div>
       </div>
 
-      <div className="w-full bg-gray-100 rounded-full h-3 mb-2">
+      <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-3 mb-2">
         <div
           className="h-3 rounded-full transition-all"
           style={{
@@ -70,17 +70,17 @@ export default function BudgetProgressCard({
       </div>
 
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-600">
+        <span className="text-sm text-gray-600 dark:text-gray-400">
           {formatAmount(status.spent, currencyCode)} /{" "}
           {formatAmount(status.limit, currencyCode)}
         </span>
         <span
           className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
             status.status === "exceeded"
-              ? "bg-red-100 text-red-700"
+              ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
               : status.status === "warning"
-              ? "bg-amber-100 text-amber-700"
-              : "bg-green-100 text-green-700"
+              ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
+              : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
           }`}
         >
           {status.percentage.toFixed(0)}%

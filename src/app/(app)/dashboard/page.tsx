@@ -49,7 +49,7 @@ export default function DashboardPage() {
 
   if (error) {
     return (
-      <div className="bg-red-50 text-red-700 p-4 rounded-lg">
+      <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-4 rounded-lg">
         <p className="font-medium">Помилка завантаження</p>
         <p className="text-sm mt-1">{error}</p>
       </div>
@@ -78,10 +78,10 @@ export default function DashboardPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
           Вітаю, {client.name}
         </h1>
-        <p className="text-gray-500 text-sm mt-1">Огляд ваших фінансів</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Огляд ваших фінансів</p>
       </div>
 
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6 rounded-2xl shadow-lg">
@@ -100,14 +100,14 @@ export default function DashboardPage() {
             return (
               <div
                 key={r.currencyCodeA}
-                className="bg-white p-4 rounded-xl border border-gray-200"
+                className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700"
               >
-                <div className="text-sm text-gray-500">{info.code}/UAH</div>
-                <div className="text-lg font-semibold mt-1">
+                <div className="text-sm text-gray-500 dark:text-gray-400">{info.code}/UAH</div>
+                <div className="text-lg font-semibold mt-1 dark:text-gray-100">
                   {r.rateBuy?.toFixed(2) || r.rateCross?.toFixed(2)} /{" "}
                   {r.rateSell?.toFixed(2) || r.rateCross?.toFixed(2)}
                 </div>
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-gray-400 dark:text-gray-500">
                   купівля / продаж
                 </div>
               </div>
@@ -117,13 +117,13 @@ export default function DashboardPage() {
       )}
 
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-800">Рахунки</h2>
-        <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Рахунки</h2>
+        <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={hideEmpty}
             onChange={(e) => setHideEmpty(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+            className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
           />
           Приховати пусті рахунки
         </label>
@@ -131,7 +131,7 @@ export default function DashboardPage() {
 
       {visibleUah.length > 0 && (
         <div>
-          <h3 className="text-sm font-medium text-gray-500 mb-3">UAH</h3>
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">UAH</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {visibleUah.map((account) => (
               <AccountCard
@@ -146,7 +146,7 @@ export default function DashboardPage() {
 
       {visibleForeign.length > 0 && (
         <div>
-          <h3 className="text-sm font-medium text-gray-500 mb-3">Валютні</h3>
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">Валютні</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {visibleForeign.map((account) => (
               <AccountCard
@@ -163,33 +163,33 @@ export default function DashboardPage() {
 
       {client.jars && client.jars.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold text-gray-800 mb-3">Банки</h2>
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Банки</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {client.jars.map((jar) => {
               const progress = jar.goal > 0 ? (jar.balance / jar.goal) * 100 : 0;
               return (
                 <div
                   key={jar.id}
-                  className="bg-white p-4 rounded-xl border border-gray-200"
+                  className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700"
                 >
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                     {jar.title}
                   </div>
                   {jar.description && (
-                    <div className="text-xs text-gray-500 mt-0.5">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       {jar.description}
                     </div>
                   )}
-                  <div className="text-xl font-bold mt-2">
+                  <div className="text-xl font-bold mt-2 dark:text-gray-100">
                     {formatAmount(jar.balance, jar.currencyCode)}
                   </div>
                   {jar.goal > 0 && (
                     <div className="mt-2">
-                      <div className="flex justify-between text-xs text-gray-400 mb-1">
+                      <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 mb-1">
                         <span>Ціль: {formatAmount(jar.goal, jar.currencyCode)}</span>
                         <span>{progress.toFixed(0)}%</span>
                       </div>
-                      <div className="w-full bg-gray-100 rounded-full h-2">
+                      <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2">
                         <div
                           className="bg-blue-500 h-2 rounded-full transition-all"
                           style={{ width: `${Math.min(progress, 100)}%` }}

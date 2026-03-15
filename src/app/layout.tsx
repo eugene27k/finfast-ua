@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "FinFast UA — Monobank Фінанси",
@@ -13,8 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="uk" suppressHydrationWarning>
-      <body className="bg-gray-50 antialiased" style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }} suppressHydrationWarning>
-        {children}
+      <body className="bg-gray-50 dark:bg-gray-900 antialiased transition-colors" style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }} suppressHydrationWarning>
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

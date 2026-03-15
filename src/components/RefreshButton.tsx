@@ -39,14 +39,14 @@ export default function RefreshButton({ onClick, loading, lastRefreshedAt }: Ref
   return (
     <div className="flex items-center gap-2">
       {lastRefreshedAt && (
-        <span className="text-[11px] text-gray-400">
+        <span className="text-[11px] text-gray-400 dark:text-gray-500">
           оновлено о {formatTime(lastRefreshedAt)}
         </span>
       )}
       <button
         onClick={onClick}
         disabled={isDisabled}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         title={title}
       >
         <svg

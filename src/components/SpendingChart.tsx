@@ -5,6 +5,7 @@ import type { MonobankStatement } from "@/types/monobank";
 import { getEffectiveCategory } from "@/lib/mcc";
 import { getCurrencyInfo } from "@/lib/currency";
 import type { OverrideInfo } from "@/components/DataProvider";
+import { useTheme } from "@/components/ThemeProvider";
 
 interface SpendingChartProps {
   transactions: MonobankStatement[];
@@ -14,6 +15,8 @@ interface SpendingChartProps {
 
 export default function SpendingChart({ transactions, currencyCode, overrides = {} }: SpendingChartProps) {
   const currency = getCurrencyInfo(currencyCode);
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
   const expenses = transactions.filter((tx) => tx.amount < 0);
 
   const categoryMap = new Map<string, { total: number; color: string }>();
@@ -40,6 +43,8 @@ export default function SpendingChart({ transactions, currencyCode, overrides = 
     );
   }
 
+  const labelColor = isDark ? "#d1d5db" : "#374151";
+
   return (
     <ResponsiveContainer width="100%" height={350}>
       <PieChart>
@@ -63,8 +68,14 @@ export default function SpendingChart({ transactions, currencyCode, overrides = 
           formatter={(value: number) =>
             `${value.toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${currency.symbol}`
           }
+          contentStyle={{
+            backgroundColor: isDark ? "#1f2937" : "#fff",
+            border: `1px solid ${isDark ? "#374151" : "#e5e7eb"}`,
+            borderRadius: "8px",
+            color: isDark ? "#f3f4f6" : "#111827",
+          }}
         />
-        <Legend />
+        <Legend wrapperStyle={{ color: labelColor }} />
       </PieChart>
     </ResponsiveContainer>
   );

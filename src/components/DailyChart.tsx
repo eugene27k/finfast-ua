@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type { MonobankStatement } from "@/types/monobank";
 import { getCurrencyInfo } from "@/lib/currency";
+import { useTheme } from "@/components/ThemeProvider";
 
 interface DailyChartProps {
   transactions: MonobankStatement[];
@@ -21,6 +22,8 @@ interface DailyChartProps {
 export default function DailyChart({ transactions, currencyCode }: DailyChartProps) {
   const currency = getCurrencyInfo(currencyCode);
   const divisor = Math.pow(10, currency.digits);
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
 
   const dailyMap = new Map<string, { income: number; expense: number }>();
 
@@ -50,18 +53,27 @@ export default function DailyChart({ transactions, currencyCode }: DailyChartPro
     );
   }
 
+  const textColor = isDark ? "#9ca3af" : "#6b7280";
+  const gridColor = isDark ? "#374151" : "#e5e7eb";
+
   return (
     <ResponsiveContainer width="100%" height={350}>
       <BarChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="date" fontSize={12} />
-        <YAxis fontSize={12} />
+        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+        <XAxis dataKey="date" fontSize={12} tick={{ fill: textColor }} />
+        <YAxis fontSize={12} tick={{ fill: textColor }} />
         <Tooltip
           formatter={(value: number) =>
             `${value.toLocaleString("uk-UA", { minimumFractionDigits: 2 })} ${currency.symbol}`
           }
+          contentStyle={{
+            backgroundColor: isDark ? "#1f2937" : "#fff",
+            border: `1px solid ${isDark ? "#374151" : "#e5e7eb"}`,
+            borderRadius: "8px",
+            color: isDark ? "#f3f4f6" : "#111827",
+          }}
         />
-        <Legend />
+        <Legend wrapperStyle={{ color: textColor }} />
         <Bar dataKey="income" name="Надходження" fill="#22c55e" radius={[4, 4, 0, 0]} />
         <Bar dataKey="expense" name="Витрати" fill="#ef4444" radius={[4, 4, 0, 0]} />
       </BarChart>

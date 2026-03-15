@@ -56,7 +56,7 @@ export default function AccountFilter({
       <div className="flex items-center justify-between">
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
         >
           <svg
             className={`w-4 h-4 transition-transform ${collapsed ? "-rotate-90" : ""}`}
@@ -70,12 +70,12 @@ export default function AccountFilter({
           Рахунки
         </button>
         {showHideEmpty && (
-          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={hideEmpty}
               onChange={(e) => onHideEmptyChange(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
             />
             Приховати пусті
           </label>
@@ -89,7 +89,7 @@ export default function AccountFilter({
             className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
               allSelected
                 ? "bg-blue-600 text-white border-blue-600"
-                : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
             }`}
           >
             Всі
@@ -108,7 +108,7 @@ export default function AccountFilter({
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                   selected
                     ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                    : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
                 }`}
               >
                 {label} {suffix && `•${suffix}`} ({info.code})
