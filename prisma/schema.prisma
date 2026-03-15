@@ -12,8 +12,9 @@ model User {
   monoToken String   @unique
   createdAt DateTime @default(now())
 
-  categories CustomCategory[]
-  overrides  TransactionOverride[]
+  categories   CustomCategory[]
+  overrides    TransactionOverride[]
+  transactions Transaction[]
 }
 
 model CustomCategory {
@@ -41,4 +42,33 @@ model TransactionOverride {
   customCategory CustomCategory? @relation(fields: [customCategoryId], references: [id])
 
   @@unique([userId, transactionId])
+}
+
+model Transaction {
+  id              String   @id
+  userId          String
+  accountId       String
+  time            Int
+  description     String
+  mcc             Int
+  originalMcc     Int
+  hold            Boolean
+  amount          Int
+  operationAmount Int
+  currencyCode    Int
+  commissionRate  Int
+  cashbackAmount  Int
+  balance         Int
+  comment         String?
+  receiptId       String?
+  invoiceId       String?
+  counterEdrpou   String?
+  counterIban     String?
+  counterName     String?
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, accountId, time])
+  @@index([userId, time])
 }

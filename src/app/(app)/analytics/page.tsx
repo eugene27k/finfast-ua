@@ -8,6 +8,8 @@ import AccountFilter from "@/components/AccountFilter";
 import RefreshButton from "@/components/RefreshButton";
 import { getEffectiveCategory } from "@/lib/mcc";
 import { formatAmount } from "@/lib/currency";
+import { useMonthComparison } from "@/lib/useMonthComparison";
+import MonthComparison from "@/components/MonthComparison";
 import { useRouter } from "next/navigation";
 
 export default function AnalyticsPage() {
@@ -55,6 +57,8 @@ export default function AnalyticsPage() {
   }, [transactions, overrides]);
 
   const totalExpenses = categoryBreakdown.reduce((s, c) => s + c.total, 0);
+
+  const comparison = useMonthComparison(selectedAccounts);
 
   useEffect(() => {
     if (tokenReady && !token) router.replace("/settings");
@@ -188,6 +192,14 @@ export default function AnalyticsPage() {
               currencyCode={currencyCode}
             />
           </div>
+
+          <MonthComparison
+            currentMonth={comparison.currentMonth}
+            previousMonth={comparison.previousMonth}
+            currencyCode={currencyCode}
+            loading={comparison.loading}
+            backfilling={comparison.backfilling}
+          />
         </>
       )}
     </div>
