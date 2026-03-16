@@ -6,6 +6,9 @@ echo.
 echo Installing dependencies...
 npm install
 echo.
+echo Generating Prisma client...
+npx prisma generate
+echo.
 echo Starting dev server...
 start "" cmd /c "timeout /t 5 /nobreak >nul && start http://localhost:3000"
 npm run dev
