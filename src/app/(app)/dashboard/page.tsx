@@ -93,7 +93,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6 rounded-2xl shadow-lg">
-        <p className="text-sm text-blue-200">Загальний баланс (UAH)</p>
+        <p className="text-sm text-blue-200">Доступний баланс (UAH)</p>
         <p className="text-4xl font-bold mt-2">
           {formatAmount(totalUah, 980)}
         </p>
