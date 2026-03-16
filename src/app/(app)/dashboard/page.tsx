@@ -66,6 +66,14 @@ export default function DashboardPage() {
   const visibleForeign = hideEmpty ? foreignAccounts.filter((a) => a.balance !== 0) : foreignAccounts;
 
   const totalUah = uahAccounts.reduce((sum, a) => sum + a.balance, 0);
+  const totalOwn = uahAccounts.reduce(
+    (sum, a) => sum + Math.max(0, a.balance - a.creditLimit),
+    0
+  );
+  const totalCredit = uahAccounts.reduce(
+    (sum, a) => sum + (a.creditLimit > 0 ? Math.min(Math.max(a.balance, 0), a.creditLimit) : 0),
+    0
+  );
 
   const mainRates = rates
     .filter(
@@ -89,6 +97,42 @@ export default function DashboardPage() {
         <p className="text-4xl font-bold mt-2">
           {formatAmount(totalUah, 980)}
         </p>
+
+        {(totalOwn > 0 || totalCredit > 0) && (() => {
+          const total = totalOwn + totalCredit;
+          const ownPct = total > 0 ? (totalOwn / total) * 100 : 0;
+          const creditPct = total > 0 ? (totalCredit / total) * 100 : 0;
+          return (
+            <div className="mt-4 space-y-2">
+              <div className="flex rounded-full h-3 overflow-hidden bg-blue-900/40">
+                {ownPct > 0 && (
+                  <div
+                    className="bg-emerald-400 h-full transition-all"
+                    style={{ width: `${ownPct}%` }}
+                  />
+                )}
+                {creditPct > 0 && (
+                  <div
+                    className="bg-red-400 h-full transition-all"
+                    style={{ width: `${creditPct}%` }}
+                  />
+                )}
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                  <span className="text-blue-100">Власні кошти:</span>
+                  <span className="font-semibold text-white">{formatAmount(totalOwn, 980)}</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400" />
+                  <span className="text-blue-100">Кредитні кошти:</span>
+                  <span className="font-semibold text-white">{formatAmount(totalCredit, 980)}</span>
+                </span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <BudgetAlertBanner statuses={budgetStatuses} currencyCode={980} />
