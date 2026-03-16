@@ -113,7 +113,7 @@ export default function DashboardPage() {
                 )}
                 {creditPct > 0 && (
                   <div
-                    className="bg-red-400 h-full transition-all"
+                    className="bg-yellow-400 h-full transition-all"
                     style={{ width: `${creditPct}%` }}
                   />
                 )}
@@ -125,8 +125,8 @@ export default function DashboardPage() {
                   <span className="font-semibold text-white">{formatAmount(totalOwn, 980)}</span>
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400" />
-                  <span className="text-blue-100">Кредитні кошти:</span>
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400" />
+                  <span className="text-blue-100">Кошти за кредитним лімітом:</span>
                   <span className="font-semibold text-white">{formatAmount(totalCredit, 980)}</span>
                 </span>
               </div>
