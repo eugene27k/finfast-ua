@@ -7,6 +7,7 @@ import TransactionRow from "@/components/TransactionRow";
 import AccountFilter from "@/components/AccountFilter";
 import RefreshButton from "@/components/RefreshButton";
 import { formatAmount, getCurrencyInfo } from "@/lib/currency";
+import { CATEGORY_NAMES, getEffectiveCategory, getCategoryColor } from "@/lib/mcc";
 import type { MonobankAccount } from "@/types/monobank";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -97,6 +98,8 @@ function TransactionsContent() {
     refresh,
     getFiltered,
     lastRefreshedAt,
+    overrides,
+    customCategories,
   } = useData();
 
   const searchParams = useSearchParams();
@@ -109,6 +112,7 @@ function TransactionsContent() {
   const [hideEmpty, setHideEmpty] = useState(false);
   const [period, setPeriod] = useState(30);
   const [search, setSearch] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
 
   const periodFrom = useMemo(
     () => Math.floor(Date.now() / 1000) - period * 24 * 60 * 60,
@@ -120,15 +124,30 @@ function TransactionsContent() {
     return all.filter((tx) => tx.time >= periodFrom);
   }, [getFiltered, selectedAccounts, periodFrom]);
 
+  const allCategoryNames = useMemo(() => {
+    const custom = customCategories.map((c) => c.name);
+    const all = [...CATEGORY_NAMES, ...custom.filter((n) => !CATEGORY_NAMES.includes(n))];
+    return all;
+  }, [customCategories]);
+
   const filtered = useMemo(() => {
-    if (!search) return transactions;
-    const q = search.toLowerCase();
-    return transactions.filter(
-      (tx) =>
-        tx.description.toLowerCase().includes(q) ||
-        (tx.comment && tx.comment.toLowerCase().includes(q))
-    );
-  }, [transactions, search]);
+    let result = transactions;
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (tx) =>
+          tx.description.toLowerCase().includes(q) ||
+          (tx.comment && tx.comment.toLowerCase().includes(q))
+      );
+    }
+    if (selectedCategories.length > 0) {
+      result = result.filter((tx) => {
+        const cat = getEffectiveCategory(tx.mcc, tx.id, overrides);
+        return selectedCategories.includes(cat.name);
+      });
+    }
+    return result;
+  }, [transactions, search, selectedCategories, overrides]);
 
   const currencyCode = client?.accounts[0]?.currencyCode || 980;
 
@@ -197,6 +216,45 @@ function TransactionsContent() {
           onChange={(e) => setSearch(e.target.value)}
           className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg text-sm flex-1 min-w-[200px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
         />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setSelectedCategories([])}
+          className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+            selectedCategories.length === 0
+              ? "bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 border-gray-900 dark:border-gray-100"
+              : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
+          }`}
+        >
+          Всі категорії
+        </button>
+        {allCategoryNames.map((cat) => {
+          const color = getCategoryColor(cat);
+          const isSelected = selectedCategories.includes(cat);
+          return (
+            <button
+              key={cat}
+              onClick={() =>
+                setSelectedCategories((prev) =>
+                  isSelected ? prev.filter((c) => c !== cat) : [...prev, cat]
+                )
+              }
+              className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                isSelected
+                  ? "text-white border-transparent"
+                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
+              }`}
+              style={isSelected ? { backgroundColor: color, borderColor: color } : {}}
+            >
+              <span
+                className="inline-block w-2 h-2 rounded-full mr-1.5"
+                style={{ backgroundColor: color }}
+              />
+              {cat}
+            </button>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
