@@ -1,12 +1,68 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useData } from "@/components/DataProvider";
 
 export default function SettingsPage() {
-  const { token, setToken, clearToken, client, clientLoading: loading, clientError: error } = useData();
+  const { token, setToken, clearToken, client, clientLoading: loading, clientError: error, userId, refreshCategories, refreshOverrides } = useData();
   const [inputToken, setInputToken] = useState("");
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = async () => {
+    if (!userId) return;
+    setExporting(true);
+    try {
+      const res = await fetch(`/api/export?userId=${userId}`);
+      if (!res.ok) throw new Error("Помилка експорту");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `finfast-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Помилка експорту");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImport = async (file: File) => {
+    if (!userId) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const text = await file.text();
+      JSON.parse(text); // validate JSON
+      const res = await fetch(`/api/import?userId=${userId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: text,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка імпорту");
+      const s = data.stats;
+      setImportResult({
+        ok: true,
+        message: `Імпортовано: ${s.transactionsCreated} транзакцій, ${s.categoriesCreated} категорій, ${s.overridesCreated} перевизначень. Пропущено дублікатів: ${s.transactionsSkipped}.`,
+      });
+      refreshCategories();
+      refreshOverrides();
+    } catch (e) {
+      setImportResult({
+        ok: false,
+        message: e instanceof Error ? e.message : "Помилка імпорту",
+      });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleSave = () => {
     const trimmed = inputToken.trim();
@@ -93,6 +149,81 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {userId && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+            Експорт / Імпорт даних
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Вивантажте всі ваші дані (транзакції, категорії, перевизначення) у файл
+            або завантажте раніше збережений файл в іншу копію додатка.
+          </p>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="px-5 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors inline-flex items-center gap-2"
+            >
+              {exporting ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" /></svg>
+                  Експорт...
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z" /><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" /></svg>
+                  Експортувати дані
+                </>
+              )}
+            </button>
+
+            <label
+              className={`px-5 py-2 text-sm font-medium rounded-lg transition-colors inline-flex items-center gap-2 cursor-pointer ${
+                importing
+                  ? "bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed"
+                  : "bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+              }`}
+            >
+              {importing ? (
+                <>
+                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" /><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" /></svg>
+                  Імпорт...
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" /><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" /></svg>
+                  Імпортувати дані
+                </>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                className="hidden"
+                disabled={importing}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleImport(file);
+                }}
+              />
+            </label>
+          </div>
+
+          {importResult && (
+            <div
+              className={`p-3 rounded-lg text-sm ${
+                importResult.ok
+                  ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400"
+                  : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"
+              }`}
+            >
+              {importResult.message}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
         <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Про додаток</h2>
