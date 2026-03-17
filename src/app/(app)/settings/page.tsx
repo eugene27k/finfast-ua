@@ -3,6 +3,11 @@
 import { useState, useRef } from "react";
 import { useData } from "@/components/DataProvider";
 
+const LOCAL_STORAGE_KEYS = [
+  "finfast_manual_entries",
+  "finfast_budgets",
+] as const;
+
 export default function SettingsPage() {
   const { token, setToken, clearToken, client, clientLoading: loading, clientError: error, userId, refreshCategories, refreshOverrides } = useData();
   const [inputToken, setInputToken] = useState("");
@@ -18,7 +23,19 @@ export default function SettingsPage() {
     try {
       const res = await fetch(`/api/export?userId=${userId}`);
       if (!res.ok) throw new Error("Помилка експорту");
-      const blob = await res.blob();
+      const serverData = await res.json();
+
+      // Merge localStorage data into the export payload
+      const localData: Record<string, unknown> = {};
+      for (const key of LOCAL_STORAGE_KEYS) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (raw) localData[key] = JSON.parse(raw);
+        } catch { /* skip corrupted */ }
+      }
+      const merged = { ...serverData, localStorage: localData };
+
+      const blob = new Blob([JSON.stringify(merged, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -38,7 +55,21 @@ export default function SettingsPage() {
     setImportResult(null);
     try {
       const text = await file.text();
-      JSON.parse(text); // validate JSON
+      const parsed = JSON.parse(text);
+
+      // Restore localStorage data if present
+      let localRestored = 0;
+      if (parsed.localStorage && typeof parsed.localStorage === "object") {
+        for (const key of LOCAL_STORAGE_KEYS) {
+          const val = parsed.localStorage[key];
+          if (val !== undefined) {
+            localStorage.setItem(key, JSON.stringify(val));
+            localRestored++;
+          }
+        }
+      }
+
+      // Send server data (without localStorage section) to API
       const res = await fetch(`/api/import?userId=${userId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -47,9 +78,10 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Помилка імпорту");
       const s = data.stats;
+      const localMsg = localRestored > 0 ? ` Відновлено локальних даних: ${localRestored}.` : "";
       setImportResult({
         ok: true,
-        message: `Імпортовано: ${s.transactionsCreated} транзакцій, ${s.categoriesCreated} категорій, ${s.overridesCreated} перевизначень. Пропущено дублікатів: ${s.transactionsSkipped}.`,
+        message: `Імпортовано: ${s.transactionsCreated} транзакцій, ${s.categoriesCreated} категорій, ${s.overridesCreated} перевизначень. Пропущено дублікатів: ${s.transactionsSkipped}.${localMsg}`,
       });
       refreshCategories();
       refreshOverrides();
