@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useData, type FetchProgress } from "@/components/DataProvider";
+import { useData, type FetchProgress, type ManualAccountData } from "@/components/DataProvider";
 import TransactionRow from "@/components/TransactionRow";
 import AccountFilter from "@/components/AccountFilter";
 import RefreshButton from "@/components/RefreshButton";
@@ -86,6 +86,53 @@ function LoadingProgress({
   );
 }
 
+interface UnifiedTransaction {
+  id: string;
+  time: number;
+  description: string;
+  amount: number;
+  currencyCode: number;
+  mcc: number;
+  comment?: string | null;
+  isManual: boolean;
+  manualAccountName?: string;
+}
+
+function ManualTransactionRow({ tx }: { tx: UnifiedTransaction }) {
+  const isExpense = tx.amount < 0;
+  const date = new Date(tx.time * 1000);
+
+  return (
+    <div className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 last:border-0">
+      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 bg-gray-500">
+        РЧ
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+          {tx.description}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+            вручну
+          </span>
+          {tx.manualAccountName && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">· {tx.manualAccountName}</span>
+          )}
+        </div>
+      </div>
+      <div className="text-right shrink-0">
+        <div className={`text-sm font-semibold ${isExpense ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+          {isExpense ? "" : "+"}{formatAmount(tx.amount, tx.currencyCode)}
+        </div>
+        <div className="text-xs text-gray-400 dark:text-gray-500">
+          {date.toLocaleDateString("uk-UA", { day: "numeric", month: "short" })}{" "}
+          {date.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TransactionsContent() {
   const {
     token,
@@ -100,6 +147,7 @@ function TransactionsContent() {
     lastRefreshedAt,
     overrides,
     customCategories,
+    manualAccounts,
   } = useData();
 
   const searchParams = useSearchParams();
@@ -120,9 +168,40 @@ function TransactionsContent() {
   );
 
   const transactions = useMemo(() => {
-    const all = getFiltered(selectedAccounts);
-    return all.filter((tx) => tx.time >= periodFrom);
-  }, [getFiltered, selectedAccounts, periodFrom]);
+    const mono = getFiltered(selectedAccounts)
+      .filter((tx) => tx.time >= periodFrom)
+      .map((tx): UnifiedTransaction => ({
+        id: tx.id,
+        time: tx.time,
+        description: tx.description,
+        amount: tx.amount,
+        currencyCode: tx.currencyCode,
+        mcc: tx.mcc,
+        comment: tx.comment,
+        isManual: false,
+      }));
+
+    // Add manual transactions
+    const manual: UnifiedTransaction[] = [];
+    for (const acc of manualAccounts) {
+      for (const tx of acc.transactions) {
+        if (tx.time >= periodFrom) {
+          manual.push({
+            id: `manual-${tx.id}`,
+            time: tx.time,
+            description: tx.description,
+            amount: tx.amount,
+            currencyCode: acc.currencyCode,
+            mcc: 0,
+            isManual: true,
+            manualAccountName: acc.name,
+          });
+        }
+      }
+    }
+
+    return [...mono, ...manual].sort((a, b) => b.time - a.time);
+  }, [getFiltered, selectedAccounts, periodFrom, manualAccounts]);
 
   const allCategoryNames = useMemo(() => {
     const custom = customCategories.map((c) => c.name);
@@ -137,11 +216,13 @@ function TransactionsContent() {
       result = result.filter(
         (tx) =>
           tx.description.toLowerCase().includes(q) ||
-          (tx.comment && tx.comment.toLowerCase().includes(q))
+          (tx.comment && tx.comment.toLowerCase().includes(q)) ||
+          (tx.manualAccountName && tx.manualAccountName.toLowerCase().includes(q))
       );
     }
     if (selectedCategories.length > 0) {
       result = result.filter((tx) => {
+        if (tx.isManual) return false; // manual transactions don't have categories
         const cat = getEffectiveCategory(tx.mcc, tx.id, overrides);
         return selectedCategories.includes(cat.name);
       });
@@ -286,7 +367,13 @@ function TransactionsContent() {
             Немає транзакцій за обраний період
           </div>
         ) : (
-          filtered.map((tx) => <TransactionRow key={tx.id} tx={tx} />)
+          filtered.map((tx) =>
+            tx.isManual ? (
+              <ManualTransactionRow key={tx.id} tx={tx} />
+            ) : (
+              <TransactionRow key={tx.id} tx={tx as unknown as import("@/types/monobank").MonobankStatement} />
+            )
+          )
         )}
       </div>
     </div>

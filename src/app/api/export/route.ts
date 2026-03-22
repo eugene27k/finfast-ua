@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [transactions, categories, overrides] = await Promise.all([
+    const [transactions, categories, overrides, manualAccountsRaw] = await Promise.all([
       prisma.transaction.findMany({
         where: { userId },
         orderBy: { time: "desc" },
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
       }),
       prisma.transactionOverride.findMany({
         where: { userId },
+      }),
+      prisma.manualAccount.findMany({
+        where: { userId },
+        include: { transactions: { orderBy: { time: "desc" } } },
       }),
     ]);
 
@@ -47,12 +51,25 @@ export async function GET(request: NextRequest) {
       }))
       .filter((o) => o.categoryName);
 
+    const manualAccountsData = manualAccountsRaw.map((acc) => ({
+      name: acc.name,
+      type: acc.type,
+      category: acc.category,
+      currencyCode: acc.currencyCode,
+      transactions: acc.transactions.map((tx) => ({
+        amount: tx.amount,
+        description: tx.description,
+        time: tx.time,
+      })),
+    }));
+
     const payload = {
       v: FORMAT_VERSION,
       exportedAt: new Date().toISOString(),
       transactions: txData,
       categories: catData,
       overrides: overrideData,
+      manualAccounts: manualAccountsData,
     };
 
     const json = JSON.stringify(payload);

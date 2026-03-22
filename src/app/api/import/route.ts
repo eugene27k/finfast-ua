@@ -35,11 +35,26 @@ interface ImportOverride {
   categoryName: string;
 }
 
+interface ImportManualTransaction {
+  amount: number;
+  description: string;
+  time: number;
+}
+
+interface ImportManualAccount {
+  name: string;
+  type: string;
+  category: string;
+  currencyCode: number;
+  transactions: ImportManualTransaction[];
+}
+
 interface ImportPayload {
   v: number;
   transactions?: ImportTransaction[];
   categories?: ImportCategory[];
   overrides?: ImportOverride[];
+  manualAccounts?: ImportManualAccount[];
 }
 
 export async function POST(request: NextRequest) {
@@ -63,7 +78,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const stats = { transactionsCreated: 0, transactionsSkipped: 0, categoriesCreated: 0, overridesCreated: 0 };
+    const stats = { transactionsCreated: 0, transactionsSkipped: 0, categoriesCreated: 0, overridesCreated: 0, manualAccountsCreated: 0, manualTransactionsCreated: 0 };
 
     // 1. Import transactions — skip duplicates by ID
     const transactions = payload.transactions || [];
@@ -171,6 +186,47 @@ export async function POST(request: NextRequest) {
           },
         });
         stats.overridesCreated++;
+      }
+    }
+
+    // 4. Import manual accounts + their transactions
+    const manualAccounts = payload.manualAccounts || [];
+    if (manualAccounts.length > 0) {
+      const existingAccounts = await prisma.manualAccount.findMany({
+        where: { userId },
+        select: { id: true, name: true },
+      });
+      const existingNames = new Map(existingAccounts.map((a) => [a.name, a.id]));
+
+      for (const acc of manualAccounts) {
+        let accountId = existingNames.get(acc.name);
+        if (!accountId) {
+          const created = await prisma.manualAccount.create({
+            data: {
+              userId,
+              name: acc.name,
+              type: acc.type,
+              category: acc.category,
+              currencyCode: acc.currencyCode || 980,
+            },
+          });
+          accountId = created.id;
+          stats.manualAccountsCreated++;
+        }
+
+        if (acc.transactions && acc.transactions.length > 0) {
+          for (const tx of acc.transactions) {
+            await prisma.manualTransaction.create({
+              data: {
+                manualAccountId: accountId,
+                amount: tx.amount,
+                description: tx.description,
+                time: tx.time,
+              },
+            });
+            stats.manualTransactionsCreated++;
+          }
+        }
       }
     }
 

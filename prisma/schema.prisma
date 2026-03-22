@@ -12,9 +12,39 @@ model User {
   monoToken String   @unique
   createdAt DateTime @default(now())
 
-  categories   CustomCategory[]
-  overrides    TransactionOverride[]
-  transactions Transaction[]
+  categories      CustomCategory[]
+  overrides       TransactionOverride[]
+  transactions    Transaction[]
+  manualAccounts  ManualAccount[]
+}
+
+model ManualAccount {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  type         String   // "asset" | "liability"
+  category     String   // "deposit" | "cash" | "investment" | "other-asset" | "installment" | "buy-in-parts" | "short-loan" | "mortgage" | "other-liability"
+  currencyCode Int      @default(980)
+  createdAt    DateTime @default(now())
+
+  user         User                @relation(fields: [userId], references: [id])
+  transactions ManualTransaction[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model ManualTransaction {
+  id              String   @id @default(cuid())
+  manualAccountId String
+  amount          Int      // in minor units (kopiyky), positive = income, negative = expense
+  description     String
+  time            Int      // unix timestamp
+  createdAt       DateTime @default(now())
+
+  account ManualAccount @relation(fields: [manualAccountId], references: [id], onDelete: Cascade)
+
+  @@index([manualAccountId, time])
 }
 
 model CustomCategory {

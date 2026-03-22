@@ -4,12 +4,11 @@ import { useState, useRef } from "react";
 import { useData } from "@/components/DataProvider";
 
 const LOCAL_STORAGE_KEYS = [
-  "finfast_manual_entries",
   "finfast_budgets",
 ] as const;
 
 export default function SettingsPage() {
-  const { token, setToken, clearToken, client, clientLoading: loading, clientError: error, userId, refreshCategories, refreshOverrides } = useData();
+  const { token, setToken, clearToken, client, clientLoading: loading, clientError: error, userId, refreshCategories, refreshOverrides, refreshManualAccounts } = useData();
   const [inputToken, setInputToken] = useState("");
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -79,12 +78,14 @@ export default function SettingsPage() {
       if (!res.ok) throw new Error(data.error || "Помилка імпорту");
       const s = data.stats;
       const localMsg = localRestored > 0 ? ` Відновлено локальних даних: ${localRestored}.` : "";
+      const manualMsg = (s.manualAccountsCreated || 0) > 0 ? ` Ручних рахунків: ${s.manualAccountsCreated}, транзакцій: ${s.manualTransactionsCreated}.` : "";
       setImportResult({
         ok: true,
-        message: `Імпортовано: ${s.transactionsCreated} транзакцій, ${s.categoriesCreated} категорій, ${s.overridesCreated} перевизначень. Пропущено дублікатів: ${s.transactionsSkipped}.${localMsg}`,
+        message: `Імпортовано: ${s.transactionsCreated} транзакцій, ${s.categoriesCreated} категорій, ${s.overridesCreated} перевизначень. Пропущено дублікатів: ${s.transactionsSkipped}.${manualMsg}${localMsg}`,
       });
       refreshCategories();
       refreshOverrides();
+      refreshManualAccounts();
     } catch (e) {
       setImportResult({
         ok: false,

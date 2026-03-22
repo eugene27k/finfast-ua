@@ -25,6 +25,24 @@ export interface OverrideInfo {
   color: string;
 }
 
+export interface ManualTransactionData {
+  id: string;
+  amount: number;
+  description: string;
+  time: number;
+}
+
+export interface ManualAccountData {
+  id: string;
+  name: string;
+  type: string;
+  category: string;
+  currencyCode: number;
+  createdAt: string;
+  balance: number;
+  transactions: ManualTransactionData[];
+}
+
 const TOKEN_KEY = "finfast_mono_token";
 const CLIENT_CACHE_KEY = "finfast_client_info";
 const CLIENT_CACHE_TTL = 60_000;
@@ -94,6 +112,9 @@ interface DataContextValue {
   overrides: Record<string, OverrideInfo>;
   refreshCategories: () => void;
   refreshOverrides: () => void;
+  manualAccounts: ManualAccountData[];
+  manualAccountsLoading: boolean;
+  refreshManualAccounts: () => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -192,6 +213,26 @@ export default function DataProvider({
   useEffect(() => {
     refreshOverrides();
   }, [refreshOverrides]);
+
+  // --- Manual accounts ---
+  const [manualAccounts, setManualAccounts] = useState<ManualAccountData[]>([]);
+  const [manualAccountsLoading, setManualAccountsLoading] = useState(false);
+
+  const refreshManualAccounts = useCallback(() => {
+    if (!userId) return;
+    setManualAccountsLoading(true);
+    fetch(`/api/manual-accounts?userId=${userId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.accounts) setManualAccounts(data.accounts);
+      })
+      .catch(() => {})
+      .finally(() => setManualAccountsLoading(false));
+  }, [userId]);
+
+  useEffect(() => {
+    refreshManualAccounts();
+  }, [refreshManualAccounts]);
 
   // --- Client info ---
   const [client, setClient] = useState<MonobankClientInfo | null>(null);
@@ -380,6 +421,9 @@ export default function DataProvider({
       overrides,
       refreshCategories,
       refreshOverrides,
+      manualAccounts,
+      manualAccountsLoading,
+      refreshManualAccounts,
     }),
     [
       token,
@@ -402,6 +446,9 @@ export default function DataProvider({
       overrides,
       refreshCategories,
       refreshOverrides,
+      manualAccounts,
+      manualAccountsLoading,
+      refreshManualAccounts,
     ]
   );
 
