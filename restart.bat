@@ -23,10 +23,16 @@ if errorlevel 1 (
 )
 echo.
 
-echo [3/4] Generating Prisma client...
+echo [3/4] Generating Prisma client & syncing DB schema...
 call npx prisma generate
 if errorlevel 1 (
     echo ERROR: prisma generate failed!
+    pause
+    exit /b 1
+)
+call npx prisma db push
+if errorlevel 1 (
+    echo ERROR: prisma db push failed!
     pause
     exit /b 1
 )

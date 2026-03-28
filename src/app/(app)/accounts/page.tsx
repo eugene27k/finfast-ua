@@ -272,8 +272,12 @@ export default function AccountsPage() {
       setShowForm(false);
       refreshManualAccounts();
     } else {
-      const err = await res.json();
-      setApiError(err.error || "Помилка створення");
+      try {
+        const err = await res.json();
+        setApiError(err.error || "Помилка створення");
+      } catch {
+        setApiError(`Помилка сервера (${res.status})`);
+      }
     }
   };
 
@@ -290,8 +294,12 @@ export default function AccountsPage() {
       setShowForm(false);
       refreshManualAccounts();
     } else {
-      const err = await res.json();
-      setApiError(err.error || "Помилка оновлення");
+      try {
+        const err = await res.json();
+        setApiError(err.error || "Помилка оновлення");
+      } catch {
+        setApiError(`Помилка сервера (${res.status})`);
+      }
     }
   };
 
