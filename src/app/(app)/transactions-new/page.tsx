@@ -5,6 +5,24 @@ import { useRouter } from "next/navigation";
 import { useData, type ManualAccountData, type ManualTransactionData } from "@/components/DataProvider";
 import { formatAmount, getCurrencyInfo } from "@/lib/currency";
 import { CATEGORY_NAMES, getCategoryColor } from "@/lib/mcc";
+import { useCurrencyRates } from "@/lib/hooks";
+import type { MonobankCurrencyRate } from "@/types/monobank";
+
+function getUahRate(currencyCode: number, rates: MonobankCurrencyRate[]): number {
+  if (currencyCode === 980) return 1;
+  // Find rate where currencyCodeA = foreign currency, currencyCodeB = 980 (UAH)
+  const rate = rates.find(
+    (r) => r.currencyCodeA === currencyCode && r.currencyCodeB === 980
+  );
+  if (rate) {
+    return rate.rateSell || rate.rateCross || rate.rateBuy || 1;
+  }
+  return 1;
+}
+
+function toUah(amount: number, currencyCode: number, rates: MonobankCurrencyRate[]): number {
+  return Math.round(amount * getUahRate(currencyCode, rates));
+}
 
 const CATEGORY_LABELS: Record<string, string> = {
   deposit: "Депозит",
@@ -250,14 +268,18 @@ function TxRow({
   account,
   onEdit,
   onDelete,
+  currencyRates,
 }: {
   tx: ManualTransactionData;
   account: ManualAccountData;
   onEdit: () => void;
   onDelete: () => void;
+  currencyRates: MonobankCurrencyRate[];
 }) {
   const isExpense = tx.amount < 0;
   const date = new Date(tx.time * 1000);
+  const isNotUah = account.currencyCode !== 980;
+  const uahAmount = isNotUah ? toUah(tx.amount, account.currencyCode, currencyRates) : null;
 
   return (
     <div className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 last:border-0 group">
@@ -282,6 +304,11 @@ function TxRow({
           <div className={`text-sm font-semibold ${isExpense ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
             {isExpense ? "" : "+"}{formatAmount(tx.amount, account.currencyCode)}
           </div>
+          {uahAmount !== null && (
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              ≈ {formatAmount(uahAmount, 980)}
+            </div>
+          )}
           <div className="text-xs text-gray-400 dark:text-gray-500">
             {date.toLocaleDateString("uk-UA", { day: "numeric", month: "short", year: "numeric" })}
           </div>
@@ -315,6 +342,7 @@ function TxRow({
 
 export default function TransactionsNewPage() {
   const { token, tokenReady, manualAccounts, refreshManualAccounts } = useData();
+  const { data: currencyRates } = useCurrencyRates();
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [editingTx, setEditingTx] = useState<{ tx: ManualTransactionData; accountId: string } | null>(null);
@@ -352,10 +380,10 @@ export default function TransactionsNewPage() {
 
   const totalIncome = allTransactions
     .filter((i) => i.tx.amount > 0)
-    .reduce((sum, i) => sum + i.tx.amount, 0);
+    .reduce((sum, i) => sum + toUah(i.tx.amount, i.account.currencyCode, currencyRates), 0);
   const totalExpense = allTransactions
     .filter((i) => i.tx.amount < 0)
-    .reduce((sum, i) => sum + Math.abs(i.tx.amount), 0);
+    .reduce((sum, i) => sum + toUah(Math.abs(i.tx.amount), i.account.currencyCode, currencyRates), 0);
 
   const handleCreate = async (data: { manualAccountId: string; amount: number; description: string; time: number }) => {
     const res = await fetch("/api/manual-transactions", {
@@ -500,6 +528,7 @@ export default function TransactionsNewPage() {
               account={account}
               onEdit={() => handleEdit(tx, account.id)}
               onDelete={() => handleDelete(tx.id)}
+              currencyRates={currencyRates}
             />
           ))
         )}
