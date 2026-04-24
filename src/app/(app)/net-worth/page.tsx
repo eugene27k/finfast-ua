@@ -4,7 +4,20 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useData, type ManualAccountData } from "@/components/DataProvider";
 import { formatAmount, getCurrencyInfo } from "@/lib/currency";
-import type { MonobankAccount, MonobankJar } from "@/types/monobank";
+import { useCurrencyRates } from "@/lib/hooks";
+import type { MonobankAccount, MonobankJar, MonobankCurrencyRate } from "@/types/monobank";
+
+function toUah(amount: number, currencyCode: number, rates: MonobankCurrencyRate[]): number {
+  if (currencyCode === 980) return amount;
+  const rate = rates.find(
+    (r) => r.currencyCodeA === currencyCode && r.currencyCodeB === 980
+  );
+  if (rate) {
+    const r = rate.rateSell || rate.rateCross || rate.rateBuy || 1;
+    return Math.round(amount * r);
+  }
+  return amount;
+}
 
 const TYPE_LABELS: Record<string, string> = {
   black: "Чорна картка",
@@ -468,6 +481,7 @@ function AccountDetail({
 
 export default function NetWorthPage() {
   const { token, tokenReady, client, clientLoading: loading, clientError: error, userId, manualAccounts, refreshManualAccounts } = useData();
+  const { data: currencyRates } = useCurrencyRates();
   const router = useRouter();
   const [showAccountForm, setShowAccountForm] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -484,13 +498,13 @@ export default function NetWorthPage() {
     const { assets, liabilities } = classifyAccounts(client.accounts, client.jars || []);
     addManualAccountsToLists(manualAccounts, assets, liabilities);
 
-    const totalAssets = assets.reduce((sum, a) => sum + a.amount, 0);
-    const totalLiabilities = liabilities.reduce((sum, l) => sum + l.amount, 0);
+    const totalAssets = assets.reduce((sum, a) => sum + toUah(a.amount, a.currencyCode, currencyRates), 0);
+    const totalLiabilities = liabilities.reduce((sum, l) => sum + toUah(l.amount, l.currencyCode, currencyRates), 0);
     const netWorth = totalAssets - totalLiabilities;
     const debtRatio = totalAssets > 0 ? totalLiabilities / totalAssets : null;
 
     return { assets, liabilities, totalAssets, totalLiabilities, netWorth, debtRatio };
-  }, [client, manualAccounts]);
+  }, [client, manualAccounts, currencyRates]);
 
   const selectedAccount = manualAccounts.find((a) => a.id === selectedAccountId) || null;
   const txFormAccount = manualAccounts.find((a) => a.id === txFormAccountId) || null;
@@ -799,9 +813,16 @@ export default function NetWorthPage() {
                     </p>
                   </div>
                 </div>
-                <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                  {formatAmount(item.amount, item.currencyCode)}
-                </span>
+                <div className="text-right">
+                  <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                    {formatAmount(item.amount, item.currencyCode)}
+                  </span>
+                  {item.currencyCode !== 980 && (
+                    <p className="text-xs text-gray-400">
+                      ≈ {formatAmount(toUah(item.amount, item.currencyCode, currencyRates), 980)}
+                    </p>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -846,9 +867,16 @@ export default function NetWorthPage() {
                     </p>
                   </div>
                 </div>
-                <span className="text-sm font-medium text-red-600 dark:text-red-400">
-                  {formatAmount(item.amount, item.currencyCode)}
-                </span>
+                <div className="text-right">
+                  <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                    {formatAmount(item.amount, item.currencyCode)}
+                  </span>
+                  {item.currencyCode !== 980 && (
+                    <p className="text-xs text-gray-400">
+                      ≈ {formatAmount(toUah(item.amount, item.currencyCode, currencyRates), 980)}
+                    </p>
+                  )}
+                </div>
               </div>
             ))}
           </div>
