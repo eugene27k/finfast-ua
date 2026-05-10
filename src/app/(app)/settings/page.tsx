@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useData } from "@/components/DataProvider";
 
 const LOCAL_STORAGE_KEYS = [
@@ -15,6 +15,68 @@ export default function SettingsPage() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ ok: boolean; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // --- AI settings ---
+  const [aiKeyInput, setAiKeyInput] = useState("");
+  const [aiKeySaving, setAiKeySaving] = useState(false);
+  const [aiKeyStatus, setAiKeyStatus] = useState<{ hasKey: boolean; keyPreview: string | null } | null>(null);
+  const [aiKeyError, setAiKeyError] = useState<string | null>(null);
+
+  const loadAiKeyStatus = useCallback(() => {
+    if (!userId) return;
+    fetch(`/api/settings/ai?userId=${userId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) return;
+        setAiKeyStatus({ hasKey: data.hasKey, keyPreview: data.keyPreview });
+      })
+      .catch(() => {});
+  }, [userId]);
+
+  useEffect(() => {
+    loadAiKeyStatus();
+  }, [loadAiKeyStatus]);
+
+  const handleSaveAiKey = async () => {
+    const trimmed = aiKeyInput.trim();
+    if (!trimmed || !userId) return;
+    setAiKeySaving(true);
+    setAiKeyError(null);
+    try {
+      const res = await fetch("/api/settings/ai", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, apiKey: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Помилка збереження");
+      setAiKeyStatus({ hasKey: data.hasKey, keyPreview: data.keyPreview });
+      setAiKeyInput("");
+    } catch (e) {
+      setAiKeyError(e instanceof Error ? e.message : "Помилка збереження");
+    } finally {
+      setAiKeySaving(false);
+    }
+  };
+
+  const handleRemoveAiKey = async () => {
+    if (!userId) return;
+    setAiKeySaving(true);
+    setAiKeyError(null);
+    try {
+      const res = await fetch("/api/settings/ai", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, apiKey: null }),
+      });
+      if (!res.ok) throw new Error("Помилка видалення");
+      setAiKeyStatus({ hasKey: false, keyPreview: null });
+    } catch (e) {
+      setAiKeyError(e instanceof Error ? e.message : "Помилка видалення");
+    } finally {
+      setAiKeySaving(false);
+    }
+  };
 
   const handleExport = async () => {
     if (!userId) return;
@@ -182,6 +244,83 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {userId && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+              AI Категоризація
+            </h2>
+            <span className="px-2 py-0.5 text-[10px] font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full uppercase tracking-wider">
+              Beta
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Підключіть ключ OpenAI API для автоматичної категоризації транзакцій за описом, MCC-кодом та іншими ознаками.
+            Ключ можна отримати на{" "}
+            <a
+              href="https://platform.openai.com/api-keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              platform.openai.com
+            </a>
+            .
+          </p>
+
+          {aiKeyStatus?.hasKey ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-gray-50 dark:bg-gray-900 px-3 py-2 rounded-lg text-sm text-gray-600 dark:text-gray-400 font-mono flex items-center gap-2">
+                  <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {aiKeyStatus.keyPreview}
+                </div>
+                <button
+                  onClick={handleRemoveAiKey}
+                  disabled={aiKeySaving}
+                  className="px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  Видалити
+                </button>
+              </div>
+              <div className="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 p-3 rounded-lg text-sm">
+                Ключ підключено. AI-категоризація доступна для ваших транзакцій.
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <input
+                type="password"
+                placeholder="sk-..."
+                value={aiKeyInput}
+                onChange={(e) => setAiKeyInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSaveAiKey()}
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 font-mono"
+              />
+              <button
+                onClick={handleSaveAiKey}
+                disabled={!aiKeyInput.trim() || aiKeySaving}
+                className="px-6 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {aiKeySaving ? "Збереження..." : "Зберегти ключ"}
+              </button>
+            </div>
+          )}
+
+          {aiKeyError && (
+            <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded-lg text-sm">
+              {aiKeyError}
+            </div>
+          )}
+
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Ключ зберігається у базі даних додатка і використовується лише для запитів до OpenAI API.
+          </p>
+        </div>
+      )}
 
       {userId && (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
