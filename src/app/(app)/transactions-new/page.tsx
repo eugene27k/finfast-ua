@@ -4,13 +4,12 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useData, type ManualAccountData, type ManualTransactionData } from "@/components/DataProvider";
 import { formatAmount, getCurrencyInfo } from "@/lib/currency";
-import { CATEGORY_NAMES, getCategoryColor } from "@/lib/mcc";
+import { CATEGORY_NAMES, getEffectiveCategory } from "@/lib/mcc";
 import { useCurrencyRates } from "@/lib/hooks";
-import type { MonobankCurrencyRate } from "@/types/monobank";
+import type { MonobankAccount, MonobankStatement, MonobankCurrencyRate } from "@/types/monobank";
 
 function getUahRate(currencyCode: number, rates: MonobankCurrencyRate[]): number {
   if (currencyCode === 980) return 1;
-  // Find rate where currencyCodeA = foreign currency, currencyCodeB = 980 (UAH)
   const rate = rates.find(
     (r) => r.currencyCodeA === currencyCode && r.currencyCodeB === 980
   );
@@ -24,7 +23,7 @@ function toUah(amount: number, currencyCode: number, rates: MonobankCurrencyRate
   return Math.round(amount * getUahRate(currencyCode, rates));
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
+const MANUAL_CATEGORY_LABELS: Record<string, string> = {
   deposit: "Депозит",
   cash: "Готівка",
   investment: "Інвестиції",
@@ -33,16 +32,56 @@ const CATEGORY_LABELS: Record<string, string> = {
   "buy-in-parts": "Покупки частинами",
   "short-loan": 'Кредит "До завтра"',
   mortgage: "Іпотека / кредит",
-  "other-liability": "Інше зобов\u2019язання",
+  "other-liability": "Інше зобов’язання",
 };
 
-/* ── Transaction form ──────────────────────────────────── */
+const CARD_TYPE_LABELS: Record<string, string> = {
+  black: "Чорна",
+  white: "Біла",
+  platinum: "Platinum",
+  iron: "Iron",
+  fop: "ФОП",
+  yellow: "Жовта",
+  eAid: "єПідтримка",
+};
+
+function getMonoAccountLabel(acc: MonobankAccount): string {
+  const label = CARD_TYPE_LABELS[acc.type] || acc.type;
+  const pan = acc.maskedPan[0];
+  const suffix = pan ? ` •${pan.slice(-4)}` : "";
+  return `${label}${suffix}`;
+}
+
+/* ── Unified types ─────────────────────────────────────── */
+
+interface UnifiedAccount {
+  id: string;
+  name: string;
+  currencyCode: number;
+  source: "mono" | "manual";
+}
+
+interface UnifiedTx {
+  id: string;
+  time: number;
+  amount: number;
+  description: string;
+  currencyCode: number;
+  accountId: string;
+  accountName: string;
+  badgeText: string;
+  badgeColor?: string;
+  source: "mono" | "manual";
+  manualTx?: ManualTransactionData;
+  manualAccount?: ManualAccountData;
+}
+
+/* ── Transaction form (manual only) ────────────────────── */
 
 interface TxFormData {
   manualAccountId: string;
   direction: "in" | "out";
   amount: string;
-  amountUah: string;
   description: string;
   category: string;
   date: string;
@@ -62,8 +101,6 @@ function TransactionFormPanel({
   initialAccountId?: string;
 }) {
   const defaultAccountId = initial?.accountId || initialAccountId || accounts[0]?.id || "";
-  const selectedAccount = accounts.find((a) => a.id === defaultAccountId);
-  const isUah = selectedAccount?.currencyCode === 980;
 
   const [form, setForm] = useState<TxFormData>(() => {
     if (initial) {
@@ -72,7 +109,6 @@ function TransactionFormPanel({
         manualAccountId: initial.accountId,
         direction: initial.tx.amount >= 0 ? "in" : "out",
         amount: (Math.abs(initial.tx.amount) / 100).toString(),
-        amountUah: "",
         description: initial.tx.description,
         category: "",
         date: date.toISOString().slice(0, 10),
@@ -82,7 +118,6 @@ function TransactionFormPanel({
       manualAccountId: defaultAccountId,
       direction: "in",
       amount: "",
-      amountUah: "",
       description: "",
       category: "",
       date: new Date().toISOString().slice(0, 10),
@@ -90,11 +125,6 @@ function TransactionFormPanel({
   });
 
   const currentAccount = accounts.find((a) => a.id === form.manualAccountId);
-  const currentIsUah = currentAccount?.currencyCode === 980;
-
-  const allCategories = useMemo(() => {
-    return ["", ...CATEGORY_NAMES];
-  }, []);
 
   const update = (patch: Partial<TxFormData>) => setForm((prev) => ({ ...prev, ...patch }));
 
@@ -130,7 +160,7 @@ function TransactionFormPanel({
     <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200">
-          {initial ? "Редагувати транзакцію" : "Нова транзакція"}
+          {initial ? "Редагувати транзакцію" : "Нова ручна транзакція"}
         </h3>
         <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -140,9 +170,8 @@ function TransactionFormPanel({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Account */}
         <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Рахунок</label>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Рахунок (ручний)</label>
           <select
             value={form.manualAccountId}
             onChange={(e) => update({ manualAccountId: e.target.value })}
@@ -156,7 +185,6 @@ function TransactionFormPanel({
           </select>
         </div>
 
-        {/* Direction */}
         <div className="flex gap-2">
           <button
             type="button"
@@ -182,37 +210,20 @@ function TransactionFormPanel({
           </button>
         </div>
 
-        {/* Amount */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-              Сума ({getCurrencyInfo(currentAccount?.currencyCode || 980).code})
-            </label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={form.amount}
-              onChange={(e) => update({ amount: e.target.value })}
-              placeholder="0.00"
-              className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-          {!currentIsUah && (
-            <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Сума в UAH</label>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={form.amountUah}
-                onChange={(e) => update({ amountUah: e.target.value })}
-                placeholder="Авторозрахунок"
-                className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-          )}
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+            Сума ({getCurrencyInfo(currentAccount?.currencyCode || 980).code})
+          </label>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={form.amount}
+            onChange={(e) => update({ amount: e.target.value })}
+            placeholder="0.00"
+            className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
         </div>
 
-        {/* Date */}
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Дата</label>
           <input
@@ -223,7 +234,6 @@ function TransactionFormPanel({
           />
         </div>
 
-        {/* Description */}
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Опис</label>
           <input
@@ -235,7 +245,6 @@ function TransactionFormPanel({
           />
         </div>
 
-        {/* Category */}
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Категорія (необов&apos;язково)</label>
           <select
@@ -264,45 +273,62 @@ function TransactionFormPanel({
 /* ── Transaction row ─────────────────────────────────────── */
 
 function TxRow({
-  tx,
-  account,
+  item,
   onEdit,
   onDelete,
   currencyRates,
 }: {
-  tx: ManualTransactionData;
-  account: ManualAccountData;
+  item: UnifiedTx;
   onEdit: () => void;
   onDelete: () => void;
   currencyRates: MonobankCurrencyRate[];
 }) {
-  const isExpense = tx.amount < 0;
-  const date = new Date(tx.time * 1000);
-  const isNotUah = account.currencyCode !== 980;
-  const uahAmount = isNotUah ? toUah(tx.amount, account.currencyCode, currencyRates) : null;
+  const isExpense = item.amount < 0;
+  const date = new Date(item.time * 1000);
+  const isNotUah = item.currencyCode !== 980;
+  const uahAmount = isNotUah ? toUah(item.amount, item.currencyCode, currencyRates) : null;
+  const isManual = item.source === "manual";
 
   return (
     <div className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 last:border-0 group">
-      <div className="w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 bg-gray-500">
-        РЧ
+      <div
+        className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${
+          isManual ? "bg-blue-500" : "bg-gray-700"
+        }`}
+        title={isManual ? "Ручна" : "Monobank"}
+      >
+        {isManual ? "РЧ" : "Mono"}
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-          {tx.description}
+          {item.description}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-            {account.name}
+          <span className={`text-[11px] px-1.5 py-0.5 rounded ${
+            isManual
+              ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+              : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+          }`}>
+            {item.accountName}
           </span>
-          <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-            {CATEGORY_LABELS[account.category] || account.category}
-          </span>
+          {item.badgeColor ? (
+            <span
+              className="text-[11px] px-1.5 py-0.5 rounded"
+              style={{ backgroundColor: `${item.badgeColor}20`, color: item.badgeColor }}
+            >
+              {item.badgeText}
+            </span>
+          ) : (
+            <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+              {item.badgeText}
+            </span>
+          )}
         </div>
       </div>
       <div className="text-right shrink-0 flex items-center gap-2">
         <div>
           <div className={`text-sm font-semibold ${isExpense ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
-            {isExpense ? "" : "+"}{formatAmount(tx.amount, account.currencyCode)}
+            {isExpense ? "" : "+"}{formatAmount(item.amount, item.currencyCode)}
           </div>
           {uahAmount !== null && (
             <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -313,26 +339,28 @@ function TxRow({
             {date.toLocaleDateString("uk-UA", { day: "numeric", month: "short", year: "numeric" })}
           </div>
         </div>
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={onEdit}
-            className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
-            title="Редагувати"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
-            </svg>
-          </button>
-          <button
-            onClick={onDelete}
-            className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-            title="Видалити"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-            </svg>
-          </button>
-        </div>
+        {isManual && (
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={onEdit}
+              className="p-1.5 text-gray-400 hover:text-blue-500 transition-colors"
+              title="Редагувати"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+              </svg>
+            </button>
+            <button
+              onClick={onDelete}
+              className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+              title="Видалити"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -341,49 +369,136 @@ function TxRow({
 /* ── Main page ────────────────────────────────────────────── */
 
 export default function TransactionsNewPage() {
-  const { token, tokenReady, manualAccounts, refreshManualAccounts } = useData();
+  const { token, tokenReady, client, statements, manualAccounts, refreshManualAccounts, overrides } = useData();
   const { data: currencyRates } = useCurrencyRates();
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [editingTx, setEditingTx] = useState<{ tx: ManualTransactionData; accountId: string } | null>(null);
   const [filterAccountId, setFilterAccountId] = useState<string>("");
+  const [filterSource, setFilterSource] = useState<"all" | "mono" | "manual">("all");
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (tokenReady && !token) router.replace("/settings");
   }, [tokenReady, token, router]);
 
-  // Flatten all manual transactions with their account info
-  const allTransactions = useMemo(() => {
-    const items: { tx: ManualTransactionData; account: ManualAccountData }[] = [];
-    for (const acc of manualAccounts) {
-      if (filterAccountId && acc.id !== filterAccountId) continue;
-      for (const tx of acc.transactions) {
-        items.push({ tx, account: acc });
+  // Build the filter dropdown's account list (Mono cards/jars + manual)
+  const filterAccounts = useMemo<UnifiedAccount[]>(() => {
+    const items: UnifiedAccount[] = [];
+    if (client) {
+      for (const acc of client.accounts) {
+        items.push({
+          id: acc.id,
+          name: getMonoAccountLabel(acc),
+          currencyCode: acc.currencyCode,
+          source: "mono",
+        });
+      }
+      for (const jar of client.jars || []) {
+        items.push({
+          id: jar.id,
+          name: `Банка: ${jar.title}`,
+          currencyCode: jar.currencyCode,
+          source: "mono",
+        });
       }
     }
-    // Sort by time desc
-    items.sort((a, b) => b.tx.time - a.tx.time);
+    for (const acc of manualAccounts) {
+      items.push({
+        id: acc.id,
+        name: acc.name,
+        currencyCode: acc.currencyCode,
+        source: "manual",
+      });
+    }
+    return items;
+  }, [client, manualAccounts]);
 
-    // Apply search
+  // Mono account lookup for naming/currency on row construction
+  const monoAccountMap = useMemo(() => {
+    const map = new Map<string, { name: string; currencyCode: number }>();
+    if (client) {
+      for (const acc of client.accounts) {
+        map.set(acc.id, { name: getMonoAccountLabel(acc), currencyCode: acc.currencyCode });
+      }
+      for (const jar of client.jars || []) {
+        map.set(jar.id, { name: `Банка: ${jar.title}`, currencyCode: jar.currencyCode });
+      }
+    }
+    return map;
+  }, [client]);
+
+  // Build unified transaction list from both sources
+  const allTransactions = useMemo<UnifiedTx[]>(() => {
+    const items: UnifiedTx[] = [];
+
+    // Mono transactions
+    if (filterSource !== "manual") {
+      for (const [accId, txList] of Object.entries(statements)) {
+        if (filterAccountId && accId !== filterAccountId) continue;
+        const accInfo = monoAccountMap.get(accId);
+        if (!accInfo) continue;
+        for (const tx of txList as MonobankStatement[]) {
+          const cat = getEffectiveCategory(tx.mcc, tx.id, overrides);
+          items.push({
+            id: tx.id,
+            time: tx.time,
+            amount: tx.amount,
+            description: tx.description,
+            currencyCode: tx.currencyCode,
+            accountId: accId,
+            accountName: accInfo.name,
+            badgeText: cat.name,
+            badgeColor: cat.color,
+            source: "mono",
+          });
+        }
+      }
+    }
+
+    // Manual transactions
+    if (filterSource !== "mono") {
+      for (const acc of manualAccounts) {
+        if (filterAccountId && acc.id !== filterAccountId) continue;
+        for (const tx of acc.transactions) {
+          items.push({
+            id: tx.id,
+            time: tx.time,
+            amount: tx.amount,
+            description: tx.description,
+            currencyCode: acc.currencyCode,
+            accountId: acc.id,
+            accountName: acc.name,
+            badgeText: MANUAL_CATEGORY_LABELS[acc.category] || acc.category,
+            source: "manual",
+            manualTx: tx,
+            manualAccount: acc,
+          });
+        }
+      }
+    }
+
+    items.sort((a, b) => b.time - a.time);
+
     if (search) {
       const q = search.toLowerCase();
       return items.filter(
         (item) =>
-          item.tx.description.toLowerCase().includes(q) ||
-          item.account.name.toLowerCase().includes(q)
+          item.description.toLowerCase().includes(q) ||
+          item.accountName.toLowerCase().includes(q) ||
+          item.badgeText.toLowerCase().includes(q)
       );
     }
 
     return items;
-  }, [manualAccounts, filterAccountId, search]);
+  }, [statements, monoAccountMap, manualAccounts, filterAccountId, filterSource, search, overrides]);
 
   const totalIncome = allTransactions
-    .filter((i) => i.tx.amount > 0)
-    .reduce((sum, i) => sum + toUah(i.tx.amount, i.account.currencyCode, currencyRates), 0);
+    .filter((i) => i.amount > 0)
+    .reduce((sum, i) => sum + toUah(i.amount, i.currencyCode, currencyRates), 0);
   const totalExpense = allTransactions
-    .filter((i) => i.tx.amount < 0)
-    .reduce((sum, i) => sum + toUah(Math.abs(i.tx.amount), i.account.currencyCode, currencyRates), 0);
+    .filter((i) => i.amount < 0)
+    .reduce((sum, i) => sum + toUah(Math.abs(i.amount), i.currencyCode, currencyRates), 0);
 
   const handleCreate = async (data: { manualAccountId: string; amount: number; description: string; time: number }) => {
     const res = await fetch("/api/manual-transactions", {
@@ -440,7 +555,7 @@ export default function TransactionsNewPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Транзакції NEW</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Ручні транзакції по рахунках</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Banking + ручні транзакції в одному списку</p>
         </div>
         <button
           onClick={() => { setEditingTx(null); setShowForm(!showForm); }}
@@ -459,23 +574,46 @@ export default function TransactionsNewPage() {
           onSave={editingTx ? handleUpdate : handleCreate}
           onCancel={handleCancel}
           initial={editingTx || undefined}
-          initialAccountId={filterAccountId || undefined}
+          initialAccountId={
+            filterAccountId && manualAccounts.some((a) => a.id === filterAccountId)
+              ? filterAccountId
+              : undefined
+          }
         />
       )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <select
+          value={filterSource}
+          onChange={(e) => setFilterSource(e.target.value as "all" | "mono" | "manual")}
+          className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="all">Всі джерела</option>
+          <option value="mono">Тільки Monobank</option>
+          <option value="manual">Тільки ручні</option>
+        </select>
+
+        <select
           value={filterAccountId}
           onChange={(e) => setFilterAccountId(e.target.value)}
           className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="">Всі рахунки</option>
-          {manualAccounts.map((acc) => (
-            <option key={acc.id} value={acc.id}>
-              {acc.name} ({getCurrencyInfo(acc.currencyCode).code})
-            </option>
-          ))}
+          <optgroup label="Monobank">
+            {filterAccounts.filter((a) => a.source === "mono").map((acc) => (
+              <option key={acc.id} value={acc.id}>
+                {acc.name} ({getCurrencyInfo(acc.currencyCode).code})
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Ручні">
+            {filterAccounts.filter((a) => a.source === "manual").map((acc) => (
+              <option key={acc.id} value={acc.id}>
+                {acc.name} ({getCurrencyInfo(acc.currencyCode).code})
+              </option>
+            ))}
+          </optgroup>
         </select>
 
         <input
@@ -511,23 +649,22 @@ export default function TransactionsNewPage() {
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {allTransactions.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
-            {manualAccounts.length === 0 ? (
+            {manualAccounts.length === 0 && filterAccounts.filter((a) => a.source === "mono").length === 0 ? (
               <>
-                Спочатку створіть рахунок.{" "}
-                <a href="/accounts" className="text-blue-600 hover:underline">Перейти до рахунків</a>
+                Немає рахунків.{" "}
+                <a href="/accounts" className="text-blue-600 hover:underline">Створіть ручний рахунок</a> або додайте Monobank токен.
               </>
             ) : (
               "Немає транзакцій"
             )}
           </div>
         ) : (
-          allTransactions.map(({ tx, account }) => (
+          allTransactions.map((item) => (
             <TxRow
-              key={tx.id}
-              tx={tx}
-              account={account}
-              onEdit={() => handleEdit(tx, account.id)}
-              onDelete={() => handleDelete(tx.id)}
+              key={`${item.source}-${item.id}`}
+              item={item}
+              onEdit={() => item.manualTx && item.manualAccount && handleEdit(item.manualTx, item.manualAccount.id)}
+              onDelete={() => handleDelete(item.id)}
               currencyRates={currencyRates}
             />
           ))
