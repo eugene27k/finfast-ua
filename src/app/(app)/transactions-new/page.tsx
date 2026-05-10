@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useData, type ManualAccountData, type ManualTransactionData, type FetchProgress } from "@/components/DataProvider";
 import RefreshButton from "@/components/RefreshButton";
+import CategoryDropdown from "@/components/CategoryDropdown";
 import { formatAmount, getCurrencyInfo } from "@/lib/currency";
 import { CATEGORY_NAMES, getEffectiveCategory, getCategoryColor } from "@/lib/mcc";
 import { useCurrencyRates } from "@/lib/hooks";
@@ -363,7 +364,13 @@ function TxRow({
           }`}>
             {item.accountName}
           </span>
-          {item.badgeColor ? (
+          {item.source === "mono" && item.badgeColor ? (
+            <CategoryDropdown
+              transactionId={item.id}
+              currentCategory={item.badgeText}
+              currentColor={item.badgeColor}
+            />
+          ) : item.badgeColor ? (
             <span
               className="text-[11px] px-1.5 py-0.5 rounded"
               style={{ backgroundColor: `${item.badgeColor}20`, color: item.badgeColor }}
