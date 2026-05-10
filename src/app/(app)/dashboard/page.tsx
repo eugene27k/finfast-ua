@@ -181,7 +181,7 @@ export default function DashboardPage() {
               <AccountCard
                 key={account.id}
                 account={account}
-                onClick={() => router.push(`/transactions?account=${account.id}`)}
+                onClick={() => router.push(`/transactions-new?account=${account.id}`)}
               />
             ))}
           </div>
@@ -197,7 +197,7 @@ export default function DashboardPage() {
                 key={account.id}
                 account={account}
                 onClick={() =>
-                  router.push(`/transactions?account=${account.id}`)
+                  router.push(`/transactions-new?account=${account.id}`)
                 }
               />
             ))}

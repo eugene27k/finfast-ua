@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useData, type ManualAccountData, type ManualTransactionData } from "@/components/DataProvider";
+import { useState, useMemo, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useData, type ManualAccountData, type ManualTransactionData, type FetchProgress } from "@/components/DataProvider";
+import RefreshButton from "@/components/RefreshButton";
 import { formatAmount, getCurrencyInfo } from "@/lib/currency";
-import { CATEGORY_NAMES, getEffectiveCategory } from "@/lib/mcc";
+import { CATEGORY_NAMES, getEffectiveCategory, getCategoryColor } from "@/lib/mcc";
 import { useCurrencyRates } from "@/lib/hooks";
 import type { MonobankAccount, MonobankStatement, MonobankCurrencyRate } from "@/types/monobank";
 
@@ -32,7 +33,7 @@ const MANUAL_CATEGORY_LABELS: Record<string, string> = {
   "buy-in-parts": "Покупки частинами",
   "short-loan": 'Кредит "До завтра"',
   mortgage: "Іпотека / кредит",
-  "other-liability": "Інше зобов’язання",
+  "other-liability": "Інше зобов'язання",
 };
 
 const CARD_TYPE_LABELS: Record<string, string> = {
@@ -66,14 +67,62 @@ interface UnifiedTx {
   time: number;
   amount: number;
   description: string;
+  comment?: string | null;
   currencyCode: number;
   accountId: string;
   accountName: string;
   badgeText: string;
   badgeColor?: string;
+  mcc?: number;
   source: "mono" | "manual";
   manualTx?: ManualTransactionData;
   manualAccount?: ManualAccountData;
+}
+
+/* ── Loading progress ──────────────────────────────────── */
+
+function LoadingProgress({
+  progress,
+  accounts,
+}: {
+  progress: FetchProgress | null;
+  accounts: MonobankAccount[];
+}) {
+  const currentAccount = progress
+    ? accounts.find((a) => a.id === progress.currentAccountId)
+    : null;
+  const pct = progress ? Math.round((progress.current / progress.total) * 100) : 0;
+
+  return (
+    <div className="p-8 flex flex-col items-center gap-4">
+      <div className="relative w-10 h-10">
+        <svg className="w-10 h-10 animate-spin" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="text-gray-200 dark:text-gray-700" />
+          <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="text-blue-500" />
+        </svg>
+      </div>
+      {progress ? (
+        <>
+          <div className="w-full max-w-xs">
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+              <span>Рахунок {progress.current} з {progress.total}</span>
+              <span>{pct}%</span>
+            </div>
+            <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+              <div className="bg-blue-500 h-2 rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+          {currentAccount && (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Завантаження: {getMonoAccountLabel(currentAccount)}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-gray-400">Підготовка до завантаження...</p>
+      )}
+    </div>
+  );
 }
 
 /* ── Transaction form (manual only) ────────────────────── */
@@ -297,12 +346,15 @@ function TxRow({
         }`}
         title={isManual ? "Ручна" : "Monobank"}
       >
-        {isManual ? "РЧ" : "Mono"}
+        {isManual ? "РЧ" : "МБ"}
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
           {item.description}
         </div>
+        {item.comment && (
+          <div className="text-xs text-gray-400 dark:text-gray-500 truncate">{item.comment}</div>
+        )}
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`text-[11px] px-1.5 py-0.5 rounded ${
             isManual
@@ -336,7 +388,8 @@ function TxRow({
             </div>
           )}
           <div className="text-xs text-gray-400 dark:text-gray-500">
-            {date.toLocaleDateString("uk-UA", { day: "numeric", month: "short", year: "numeric" })}
+            {date.toLocaleDateString("uk-UA", { day: "numeric", month: "short" })}{" "}
+            {date.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}
           </div>
         </div>
         {isManual && (
@@ -366,55 +419,59 @@ function TxRow({
   );
 }
 
-/* ── Main page ────────────────────────────────────────────── */
+/* ── Main page content ───────────────────────────────────── */
 
-export default function TransactionsNewPage() {
-  const { token, tokenReady, client, statements, manualAccounts, refreshManualAccounts, overrides } = useData();
+function TransactionsContent() {
+  const {
+    token, tokenReady, client, statements,
+    statementsLoading, statementsError, progress,
+    refresh, lastRefreshedAt,
+    manualAccounts, refreshManualAccounts,
+    overrides, customCategories,
+  } = useData();
   const { data: currencyRates } = useCurrencyRates();
+  const searchParams = useSearchParams();
   const router = useRouter();
+
+  const initialAccount = searchParams.get("account") || "";
   const [showForm, setShowForm] = useState(false);
   const [editingTx, setEditingTx] = useState<{ tx: ManualTransactionData; accountId: string } | null>(null);
-  const [filterAccountId, setFilterAccountId] = useState<string>("");
+  const [filterAccountId, setFilterAccountId] = useState<string>(initialAccount);
   const [filterSource, setFilterSource] = useState<"all" | "mono" | "manual">("all");
+  const [period, setPeriod] = useState(30);
   const [search, setSearch] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+
+  const periodFrom = useMemo(
+    () => Math.floor(Date.now() / 1000) - period * 24 * 60 * 60,
+    [period]
+  );
 
   useEffect(() => {
     if (tokenReady && !token) router.replace("/settings");
   }, [tokenReady, token, router]);
 
-  // Build the filter dropdown's account list (Mono cards/jars + manual)
+  const allCategoryNames = useMemo(() => {
+    const custom = customCategories.map((c) => c.name);
+    return [...CATEGORY_NAMES, ...custom.filter((n) => !CATEGORY_NAMES.includes(n))];
+  }, [customCategories]);
+
   const filterAccounts = useMemo<UnifiedAccount[]>(() => {
     const items: UnifiedAccount[] = [];
     if (client) {
       for (const acc of client.accounts) {
-        items.push({
-          id: acc.id,
-          name: getMonoAccountLabel(acc),
-          currencyCode: acc.currencyCode,
-          source: "mono",
-        });
+        items.push({ id: acc.id, name: getMonoAccountLabel(acc), currencyCode: acc.currencyCode, source: "mono" });
       }
       for (const jar of client.jars || []) {
-        items.push({
-          id: jar.id,
-          name: `Банка: ${jar.title}`,
-          currencyCode: jar.currencyCode,
-          source: "mono",
-        });
+        items.push({ id: jar.id, name: `Банка: ${jar.title}`, currencyCode: jar.currencyCode, source: "mono" });
       }
     }
     for (const acc of manualAccounts) {
-      items.push({
-        id: acc.id,
-        name: acc.name,
-        currencyCode: acc.currencyCode,
-        source: "manual",
-      });
+      items.push({ id: acc.id, name: acc.name, currencyCode: acc.currencyCode, source: "manual" });
     }
     return items;
   }, [client, manualAccounts]);
 
-  // Mono account lookup for naming/currency on row construction
   const monoAccountMap = useMemo(() => {
     const map = new Map<string, { name: string; currencyCode: number }>();
     if (client) {
@@ -428,39 +485,40 @@ export default function TransactionsNewPage() {
     return map;
   }, [client]);
 
-  // Build unified transaction list from both sources
   const allTransactions = useMemo<UnifiedTx[]>(() => {
     const items: UnifiedTx[] = [];
 
-    // Mono transactions
     if (filterSource !== "manual") {
       for (const [accId, txList] of Object.entries(statements)) {
         if (filterAccountId && accId !== filterAccountId) continue;
         const accInfo = monoAccountMap.get(accId);
         if (!accInfo) continue;
         for (const tx of txList as MonobankStatement[]) {
+          if (tx.time < periodFrom) continue;
           const cat = getEffectiveCategory(tx.mcc, tx.id, overrides);
           items.push({
             id: tx.id,
             time: tx.time,
             amount: tx.amount,
             description: tx.description,
+            comment: tx.comment,
             currencyCode: tx.currencyCode,
             accountId: accId,
             accountName: accInfo.name,
             badgeText: cat.name,
             badgeColor: cat.color,
+            mcc: tx.mcc,
             source: "mono",
           });
         }
       }
     }
 
-    // Manual transactions
     if (filterSource !== "mono") {
       for (const acc of manualAccounts) {
         if (filterAccountId && acc.id !== filterAccountId) continue;
         for (const tx of acc.transactions) {
+          if (tx.time < periodFrom) continue;
           items.push({
             id: tx.id,
             time: tx.time,
@@ -479,24 +537,34 @@ export default function TransactionsNewPage() {
     }
 
     items.sort((a, b) => b.time - a.time);
+    return items;
+  }, [statements, monoAccountMap, manualAccounts, filterAccountId, filterSource, periodFrom, overrides]);
 
+  const filtered = useMemo(() => {
+    let result = allTransactions;
     if (search) {
       const q = search.toLowerCase();
-      return items.filter(
+      result = result.filter(
         (item) =>
           item.description.toLowerCase().includes(q) ||
           item.accountName.toLowerCase().includes(q) ||
-          item.badgeText.toLowerCase().includes(q)
+          item.badgeText.toLowerCase().includes(q) ||
+          (item.comment && item.comment.toLowerCase().includes(q))
       );
     }
+    if (selectedCategories.length > 0) {
+      result = result.filter((item) => {
+        if (item.source === "manual") return false;
+        return selectedCategories.includes(item.badgeText);
+      });
+    }
+    return result;
+  }, [allTransactions, search, selectedCategories]);
 
-    return items;
-  }, [statements, monoAccountMap, manualAccounts, filterAccountId, filterSource, search, overrides]);
-
-  const totalIncome = allTransactions
+  const totalIncome = filtered
     .filter((i) => i.amount > 0)
     .reduce((sum, i) => sum + toUah(i.amount, i.currencyCode, currencyRates), 0);
-  const totalExpense = allTransactions
+  const totalExpense = filtered
     .filter((i) => i.amount < 0)
     .reduce((sum, i) => sum + toUah(Math.abs(i.amount), i.currencyCode, currencyRates), 0);
 
@@ -542,30 +610,27 @@ export default function TransactionsNewPage() {
     setEditingTx(null);
   };
 
-  if (!tokenReady) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-pulse text-gray-400">Завантаження...</div>
-      </div>
-    );
-  }
+  if (!tokenReady || !token) return null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Транзакції NEW</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Banking + ручні транзакції в одному списку</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Транзакції</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Monobank + ручні рахунки</p>
         </div>
-        <button
-          onClick={() => { setEditingTx(null); setShowForm(!showForm); }}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Нова транзакція
-        </button>
+        <div className="flex items-center gap-3">
+          <RefreshButton onClick={refresh} loading={statementsLoading} lastRefreshedAt={lastRefreshedAt} />
+          <button
+            onClick={() => { setEditingTx(null); setShowForm(!showForm); }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Нова транзакція
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -582,7 +647,7 @@ export default function TransactionsNewPage() {
         />
       )}
 
-      {/* Filters */}
+      {/* Filters row 1: source, account, period, search */}
       <div className="flex flex-wrap gap-3 items-center">
         <select
           value={filterSource}
@@ -600,21 +665,45 @@ export default function TransactionsNewPage() {
           className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="">Всі рахунки</option>
-          <optgroup label="Monobank">
-            {filterAccounts.filter((a) => a.source === "mono").map((acc) => (
-              <option key={acc.id} value={acc.id}>
-                {acc.name} ({getCurrencyInfo(acc.currencyCode).code})
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="Ручні">
-            {filterAccounts.filter((a) => a.source === "manual").map((acc) => (
-              <option key={acc.id} value={acc.id}>
-                {acc.name} ({getCurrencyInfo(acc.currencyCode).code})
-              </option>
-            ))}
-          </optgroup>
+          {filterAccounts.filter((a) => a.source === "mono").length > 0 && (
+            <optgroup label="Monobank">
+              {filterAccounts.filter((a) => a.source === "mono").map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} ({getCurrencyInfo(acc.currencyCode).code})
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {filterAccounts.filter((a) => a.source === "manual").length > 0 && (
+            <optgroup label="Ручні">
+              {filterAccounts.filter((a) => a.source === "manual").map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} ({getCurrencyInfo(acc.currencyCode).code})
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
+
+        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          {[
+            { label: "7 днів", value: 7 },
+            { label: "14 днів", value: 14 },
+            { label: "30 днів", value: 30 },
+          ].map((p) => (
+            <button
+              key={p.value}
+              onClick={() => setPeriod(p.value)}
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                period === p.value
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
 
         <input
           type="text"
@@ -625,11 +714,48 @@ export default function TransactionsNewPage() {
         />
       </div>
 
+      {/* Category filter pills */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => setSelectedCategories([])}
+          className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+            selectedCategories.length === 0
+              ? "bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 border-gray-900 dark:border-gray-100"
+              : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
+          }`}
+        >
+          Всі категорії
+        </button>
+        {allCategoryNames.map((cat) => {
+          const color = getCategoryColor(cat);
+          const isSelected = selectedCategories.includes(cat);
+          return (
+            <button
+              key={cat}
+              onClick={() =>
+                setSelectedCategories((prev) =>
+                  isSelected ? prev.filter((c) => c !== cat) : [...prev, cat]
+                )
+              }
+              className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                isSelected
+                  ? "text-white border-transparent"
+                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
+              }`}
+              style={isSelected ? { backgroundColor: color, borderColor: color } : {}}
+            >
+              <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: color }} />
+              {cat}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
           <p className="text-sm text-gray-500 dark:text-gray-400">Транзакцій</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{allTransactions.length}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{filtered.length}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
           <p className="text-sm text-gray-500 dark:text-gray-400">Надходження</p>
@@ -638,7 +764,7 @@ export default function TransactionsNewPage() {
           </p>
         </div>
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Списання</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Витрати</p>
           <p className="text-2xl font-bold text-red-600 dark:text-red-400">
             -{formatAmount(totalExpense, 980)}
           </p>
@@ -647,19 +773,16 @@ export default function TransactionsNewPage() {
 
       {/* Transaction list */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-        {allTransactions.length === 0 ? (
+        {statementsLoading ? (
+          <LoadingProgress progress={progress} accounts={client?.accounts || []} />
+        ) : statementsError ? (
+          <div className="p-4 text-red-600 dark:text-red-400 text-sm">{statementsError}</div>
+        ) : filtered.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
-            {manualAccounts.length === 0 && filterAccounts.filter((a) => a.source === "mono").length === 0 ? (
-              <>
-                Немає рахунків.{" "}
-                <a href="/accounts" className="text-blue-600 hover:underline">Створіть ручний рахунок</a> або додайте Monobank токен.
-              </>
-            ) : (
-              "Немає транзакцій"
-            )}
+            Немає транзакцій за обраний період
           </div>
         ) : (
-          allTransactions.map((item) => (
+          filtered.map((item) => (
             <TxRow
               key={`${item.source}-${item.id}`}
               item={item}
@@ -671,5 +794,13 @@ export default function TransactionsNewPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function TransactionsPage() {
+  return (
+    <Suspense fallback={<div className="animate-pulse text-gray-400 p-8">Завантаження...</div>}>
+      <TransactionsContent />
+    </Suspense>
   );
 }
