@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useData } from "@/components/DataProvider";
+import { generatePassword, saveToPasswordManager } from "@/lib/passwords";
 
 const LOCAL_STORAGE_KEYS = [
   "finfast_budgets",
@@ -21,6 +22,48 @@ export default function SettingsPage() {
   const [aiKeySaving, setAiKeySaving] = useState(false);
   const [aiKeyStatus, setAiKeyStatus] = useState<{ hasKey: boolean; keyPreview: string | null } | null>(null);
   const [aiKeyError, setAiKeyError] = useState<string | null>(null);
+
+  // --- Password change ---
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [pwdResult, setPwdResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const handleChangePassword = async () => {
+    setPwdResult(null);
+    if (newPassword.length < 8) {
+      setPwdResult({ ok: false, message: "Новий пароль має містити щонайменше 8 символів." });
+      return;
+    }
+    setPwdSaving(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg =
+          data.error === "WRONG_PASSWORD"
+            ? "Поточний пароль невірний."
+            : data.error === "WEAK_PASSWORD"
+            ? "Новий пароль має містити щонайменше 8 символів."
+            : data.error || "Помилка зміни пароля";
+        throw new Error(msg);
+      }
+      if (data.email) await saveToPasswordManager(data.email, newPassword);
+      setPwdResult({ ok: true, message: "Пароль змінено. Збережіть новий пароль у менеджері браузера." });
+      setOldPassword("");
+      setNewPassword("");
+      setShowNewPassword(false);
+    } catch (e) {
+      setPwdResult({ ok: false, message: e instanceof Error ? e.message : "Помилка зміни пароля" });
+    } finally {
+      setPwdSaving(false);
+    }
+  };
 
   const loadAiKeyStatus = useCallback(() => {
     if (!userId) return;
@@ -244,6 +287,81 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      {userId && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+            Пароль для входу
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Пароль шифрує вашу базу даних. Після зміни збережіть новий пароль у менеджері
+            паролів браузера.
+          </p>
+          <div className="space-y-3">
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Поточний пароль</span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+                placeholder="Ваш поточний пароль"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              />
+            </label>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Новий пароль</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewPassword(generatePassword());
+                    setShowNewPassword(true);
+                  }}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  Згенерувати
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type={showNewPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Щонайменше 8 символів"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((v) => !v)}
+                  className="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 shrink-0"
+                >
+                  {showNewPassword ? "Сховати" : "Показати"}
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={handleChangePassword}
+              disabled={!oldPassword || !newPassword || pwdSaving}
+              className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {pwdSaving ? "Зміна..." : "Змінити пароль"}
+            </button>
+            {pwdResult && (
+              <div
+                className={`p-3 rounded-lg text-sm ${
+                  pwdResult.ok
+                    ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400"
+                    : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"
+                }`}
+              >
+                {pwdResult.message}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {userId && (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">

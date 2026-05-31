@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth/session";
 
 const SUPPORTED_VERSIONS = [1];
 
@@ -58,10 +59,10 @@ interface ImportPayload {
 }
 
 export async function POST(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId");
-  if (!userId) {
-    return NextResponse.json({ error: "userId is required" }, { status: 400 });
-  }
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const userId = auth.userId;
+  const db = getDb();
 
   let payload: ImportPayload;
   try {
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
     const transactions = payload.transactions || [];
     if (transactions.length > 0) {
       // Get existing transaction IDs for this user in one query
-      const existingTxs = await prisma.transaction.findMany({
+      const existingTxs = await db.transaction.findMany({
         where: {
           userId,
           id: { in: transactions.map((tx) => tx.id) },
@@ -101,7 +102,7 @@ export async function POST(request: NextRequest) {
         const CHUNK = 500;
         for (let i = 0; i < newTxs.length; i += CHUNK) {
           const chunk = newTxs.slice(i, i + CHUNK);
-          await prisma.transaction.createMany({
+          await db.transaction.createMany({
             data: chunk.map((tx) => ({
               id: tx.id,
               userId,
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest) {
     const categoryNameToId: Record<string, string> = {};
 
     if (categories.length > 0) {
-      const existingCats = await prisma.customCategory.findMany({
+      const existingCats = await db.customCategory.findMany({
         where: { userId },
         select: { id: true, name: true },
       });
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
         if (existingNames.has(cat.name)) {
           categoryNameToId[cat.name] = existingNames.get(cat.name)!;
         } else {
-          const created = await prisma.customCategory.create({
+          const created = await db.customCategory.create({
             data: { userId, name: cat.name, color: cat.color },
           });
           categoryNameToId[cat.name] = created.id;
@@ -160,14 +161,14 @@ export async function POST(request: NextRequest) {
     if (overrides.length > 0) {
       // Build category name→id map (include already-existing)
       if (Object.keys(categoryNameToId).length === 0) {
-        const allCats = await prisma.customCategory.findMany({
+        const allCats = await db.customCategory.findMany({
           where: { userId },
           select: { id: true, name: true },
         });
         for (const c of allCats) categoryNameToId[c.name] = c.id;
       }
 
-      const existingOverrides = await prisma.transactionOverride.findMany({
+      const existingOverrides = await db.transactionOverride.findMany({
         where: { userId },
         select: { transactionId: true },
       });
@@ -178,7 +179,7 @@ export async function POST(request: NextRequest) {
         const catId = categoryNameToId[ov.categoryName];
         if (!catId) continue;
 
-        await prisma.transactionOverride.create({
+        await db.transactionOverride.create({
           data: {
             userId,
             transactionId: ov.transactionId,
@@ -192,7 +193,7 @@ export async function POST(request: NextRequest) {
     // 4. Import manual accounts + their transactions
     const manualAccounts = payload.manualAccounts || [];
     if (manualAccounts.length > 0) {
-      const existingAccounts = await prisma.manualAccount.findMany({
+      const existingAccounts = await db.manualAccount.findMany({
         where: { userId },
         select: { id: true, name: true },
       });
@@ -201,7 +202,7 @@ export async function POST(request: NextRequest) {
       for (const acc of manualAccounts) {
         let accountId = existingNames.get(acc.name);
         if (!accountId) {
-          const created = await prisma.manualAccount.create({
+          const created = await db.manualAccount.create({
             data: {
               userId,
               name: acc.name,
@@ -216,7 +217,7 @@ export async function POST(request: NextRequest) {
 
         if (acc.transactions && acc.transactions.length > 0) {
           for (const tx of acc.transactions) {
-            await prisma.manualTransaction.create({
+            await db.manualTransaction.create({
               data: {
                 manualAccountId: accountId,
                 amount: tx.amount,

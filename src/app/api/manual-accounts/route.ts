@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth/session";
 
-// GET /api/manual-accounts?userId=...
+// GET /api/manual-accounts
 export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId");
-  if (!userId) {
-    return NextResponse.json({ error: "userId is required" }, { status: 400 });
-  }
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  const accounts = await prisma.manualAccount.findMany({
-    where: { userId },
+  const accounts = await getDb().manualAccount.findMany({
+    where: { userId: auth.userId },
     include: { transactions: { orderBy: { time: "desc" } } },
     orderBy: { createdAt: "asc" },
   });
 
-  // Compute balance for each account
   const result = accounts.map((acc) => ({
     id: acc.id,
     name: acc.name,
@@ -36,17 +34,20 @@ export async function GET(request: NextRequest) {
 
 // POST /api/manual-accounts — create new account
 export async function POST(request: NextRequest) {
-  const body = await request.json();
-  const { userId, name, type, category, currencyCode } = body;
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
-  if (!userId || !name || !type || !category) {
+  const body = await request.json();
+  const { name, type, category, currencyCode } = body;
+
+  if (!name || !type || !category) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
   try {
-    const account = await prisma.manualAccount.create({
+    const account = await getDb().manualAccount.create({
       data: {
-        userId,
+        userId: auth.userId,
         name: name.trim(),
         type,
         category,
@@ -64,17 +65,29 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/manual-accounts?id=...
 export async function DELETE(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
   const id = request.nextUrl.searchParams.get("id");
   if (!id) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
-  await prisma.manualAccount.delete({ where: { id } });
+  // Scope by userId so a caller can only delete their own account.
+  const deleted = await getDb().manualAccount.deleteMany({
+    where: { id, userId: auth.userId },
+  });
+  if (deleted.count === 0) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   return NextResponse.json({ ok: true });
 }
 
 // PUT /api/manual-accounts — update account name/category
 export async function PUT(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
   const body = await request.json();
   const { id, name, type, category } = body;
 
@@ -87,10 +100,13 @@ export async function PUT(request: NextRequest) {
   if (type) data.type = type;
   if (category) data.category = category;
 
-  const account = await prisma.manualAccount.update({
-    where: { id },
+  // updateMany lets us scope by userId in the same statement.
+  const updated = await getDb().manualAccount.updateMany({
+    where: { id, userId: auth.userId },
     data,
   });
-
-  return NextResponse.json({ account });
+  if (updated.count === 0) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true });
 }

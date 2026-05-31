@@ -367,6 +367,7 @@ function TxRow({
           {item.source === "mono" && item.badgeColor ? (
             <CategoryDropdown
               transactionId={item.id}
+              mcc={item.mcc ?? 0}
               currentCategory={item.badgeText}
               currentColor={item.badgeColor}
             />

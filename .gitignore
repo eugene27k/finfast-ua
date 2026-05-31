@@ -42,6 +42,11 @@ next-env.d.ts
 # prisma local db
 prisma/dev.db
 prisma/dev.db-journal
+prisma/dev.db.*
+
+# auth keystore (per-install secret material — never commit)
+prisma/keystore.json
+prisma/keystore.json.tmp
 
 # prisma generated client
 src/generated/

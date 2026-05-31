@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId");
-  if (!userId) {
-    return NextResponse.json({ error: "userId is required" }, { status: 400 });
-  }
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
+    const user = await getDb().user.findUnique({
+      where: { id: auth.userId },
       select: { openaiApiKey: true },
     });
 
@@ -26,11 +25,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const { userId, apiKey } = await request.json();
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
+    const { apiKey } = await request.json();
 
     if (apiKey) {
       const trimmed = apiKey.trim();
@@ -41,8 +40,8 @@ export async function PUT(request: NextRequest) {
         );
       }
 
-      await prisma.user.update({
-        where: { id: userId },
+      await getDb().user.update({
+        where: { id: auth.userId },
         data: { openaiApiKey: trimmed },
       });
 
@@ -54,8 +53,8 @@ export async function PUT(request: NextRequest) {
     }
 
     // Remove key
-    await prisma.user.update({
-      where: { id: userId },
+    await getDb().user.update({
+      where: { id: auth.userId },
       data: { openaiApiKey: null },
     });
 

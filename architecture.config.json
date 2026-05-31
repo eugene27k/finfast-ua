@@ -1,0 +1,1060 @@
+{
+  "$comment": "Семантичний конфіг архітектурної мапи. Генератор (scripts/generate-architecture.js) зливає цей файл з результатами сканування коду і вписує у architecture.html. Список вузлів (pages/api/lib/components/db) — автоматичний. Тут описане лише те, чого нема у коді: модулі, сценарії, потоки, зовнішні сервіси, ребра що не виявляються через fetch/import. ВАЖЛИВО: кожен модуль повинен мати поле `description` — 2-3 речення українською про роль модуля з точки зору користувача (за що відповідає, для чого він користувачу, як співпрацює з рештою). Генератор попереджає про модулі без опису.",
+  "cols": {
+    "ui": {
+      "x": 8,
+      "label": "Pages"
+    },
+    "comp": {
+      "x": 26,
+      "label": "Components"
+    },
+    "api": {
+      "x": 48,
+      "label": "API Routes"
+    },
+    "lib": {
+      "x": 70,
+      "label": "Lib / ORM"
+    },
+    "ext": {
+      "x": 90,
+      "label": "External · DB · Storage"
+    }
+  },
+  "externals": [
+    {
+      "id": "ext-mono",
+      "group": "ext",
+      "col": "ext",
+      "y": 280,
+      "name": "Monobank API",
+      "sub": "api.monobank.ua · X-Token auth",
+      "path": "https://api.monobank.ua"
+    },
+    {
+      "id": "ext-openai",
+      "group": "ext",
+      "col": "ext",
+      "y": 130,
+      "name": "OpenAI API",
+      "sub": "опційно · виклики з ключа User.openaiApiKey",
+      "path": "https://api.openai.com"
+    },
+    {
+      "id": "store-local",
+      "group": "store",
+      "col": "ext",
+      "y": 980,
+      "name": "localStorage",
+      "sub": "finfast_mono_token · finfast_user_id · finfast_budgets",
+      "path": "browser"
+    },
+    {
+      "id": "store-session",
+      "group": "store",
+      "col": "ext",
+      "y": 1080,
+      "name": "sessionStorage",
+      "sub": "кеш client (60s) · statements (5хв) · currency (5хв)",
+      "path": "browser"
+    }
+  ],
+  "manualEdges": [
+    {
+      "from": "comp-dataprovider",
+      "to": "store-local"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "store-session"
+    },
+    {
+      "from": "lib-budgets",
+      "to": "store-local"
+    },
+    {
+      "from": "lib-hooks",
+      "to": "store-session"
+    },
+    {
+      "from": "api-settings-ai",
+      "to": "ext-openai"
+    },
+    {
+      "from": "lib-monobank",
+      "to": "ext-mono"
+    }
+  ],
+  "nodeOverrides": {
+    "comp-dataprovider": {
+      "sub": "глобальний стан: token, client, statements, overrides, manual accounts; TTL кеш"
+    },
+    "comp-refreshbutton": {
+      "sub": "ручний тригер синхронізації · cooldown 5хв"
+    },
+    "comp-categorydropdown": {
+      "sub": "override категорії транзакції"
+    },
+    "comp-budgetalertbanner": {
+      "sub": "банер для перевищених/попереджувальних бюджетів"
+    },
+    "comp-budgetprogresscard": {
+      "sub": "прогрес-бар бюджета по категорії"
+    },
+    "comp-dailychart": {
+      "sub": "гістограма витрат по днях"
+    },
+    "comp-spendingchart": {
+      "sub": "pie chart витрат по категоріях"
+    },
+    "comp-monthcomparison": {
+      "sub": "поточний місяць vs попередній"
+    },
+    "comp-accountcard": {
+      "sub": "картка рахунка з балансом і типом"
+    },
+    "comp-accountfilter": {
+      "sub": "мульти-фільтр за рахунками"
+    },
+    "comp-sidebar": {
+      "sub": "лівий навігаційний сайдбар"
+    },
+    "comp-themeprovider": {
+      "sub": "dark / light mode"
+    },
+    "comp-toast": {
+      "sub": "спливаючі повідомлення"
+    },
+    "lib-monobank": {
+      "sub": "getClientInfo · getStatement · getCurrencyRates · setWebhook"
+    },
+    "lib-prisma": {
+      "sub": "Prisma Client (singleton)"
+    },
+    "lib-mcc": {
+      "sub": "MCC → категорія + getEffectiveCategory(overrides) · 15 категорій"
+    },
+    "lib-budgets": {
+      "sub": "useBudgets() + статуси ok/warning/exceeded"
+    },
+    "lib-hooks": {
+      "sub": "useCurrencyRates() · TTL 5хв"
+    },
+    "lib-currency": {
+      "sub": "символи валют + formatAmount"
+    },
+    "lib-accounts": {
+      "sub": "sortAccounts()"
+    },
+    "lib-usemonthcomparison": {
+      "sub": "порівняння витрат поточного vs минулого місяця"
+    },
+    "page-home": {
+      "name": "Home (redirect)",
+      "sub": "/ → /dashboard або /settings"
+    },
+    "page-dashboard": {
+      "name": "Dashboard",
+      "sub": "/dashboard · баланс, акаунти, курси, бюджети"
+    },
+    "page-transactions-new": {
+      "name": "Transactions",
+      "sub": "/transactions-new · фільтри, override"
+    },
+    "page-analytics": {
+      "name": "Analytics",
+      "sub": "/analytics · Daily, Spending, Month Cmp"
+    },
+    "page-budgets": {
+      "name": "Budgets",
+      "sub": "/budgets · ліміти, алерти, прогрес"
+    },
+    "page-accounts": {
+      "name": "Accounts",
+      "sub": "/accounts · перелік рахунків"
+    },
+    "page-net-worth": {
+      "name": "Net Worth",
+      "sub": "/net-worth · активи − пасиви"
+    },
+    "page-settings": {
+      "name": "Settings",
+      "sub": "/settings · token, OpenAI key, категорії"
+    },
+    "api-user": {
+      "sub": "upsert User за monoToken → userId"
+    },
+    "api-settings-ai": {
+      "sub": "GET/PUT OpenAI ключа користувача"
+    },
+    "api-monobank-client-info": {
+      "sub": "інфо клієнта: рахунки + банки"
+    },
+    "api-monobank-statement": {
+      "sub": "виписка по account за період + фоновий upsert у БД"
+    },
+    "api-monobank-currency": {
+      "sub": "курси валют з server-side cache"
+    },
+    "api-monobank-webhook": {
+      "sub": "реєстрація webhook для real-time оновлень"
+    },
+    "api-categories": {
+      "sub": "GET/POST/DELETE custom категорій"
+    },
+    "api-transactions-overrides": {
+      "sub": "GET/PUT перевизначення категорії транзакції"
+    },
+    "api-transactions-history": {
+      "sub": "транзакції з БД (історія)"
+    },
+    "api-transactions-backfill": {
+      "sub": "масовий завантажувач попереднього місяця"
+    },
+    "api-manual-accounts": {
+      "sub": "CRUD ручних рахунків (asset / liability)"
+    },
+    "api-manual-transactions": {
+      "sub": "ручні транзакції"
+    },
+    "api-export": {
+      "sub": "експорт транзакцій (JSON/CSV)"
+    },
+    "api-import": {
+      "sub": "імпорт транзакцій з файлу"
+    },
+    "page-login": {
+      "name": "Login",
+      "sub": "/login · вхід з майстер-паролем"
+    },
+    "page-setup": {
+      "name": "Setup",
+      "sub": "/setup · перший запуск · створення майстер-пароля"
+    },
+    "api-auth-login": {
+      "sub": "POST · перевіряє пароль, відкриває vault, видає сесію"
+    },
+    "api-auth-logout": {
+      "sub": "POST · знищує сесію та забуває ключ"
+    },
+    "api-auth-me": {
+      "sub": "GET · поточний користувач"
+    },
+    "api-auth-status": {
+      "sub": "GET · чи виконано setup, чи активна сесія"
+    },
+    "api-auth-setup": {
+      "sub": "POST · initial setup vault із паролем"
+    },
+    "api-auth-change-password": {
+      "sub": "POST · змінити пароль (rewrap key)"
+    },
+    "api-auth-recover": {
+      "sub": "POST · recovery flow (recovery key/phrase)"
+    },
+    "lib-passwords": {
+      "sub": "хешування + verify паролів"
+    },
+    "lib-bootstrap": {
+      "sub": "ініціалізація vault при першому запуску"
+    },
+    "lib-session": {
+      "sub": "управління сесіями (cookie / in-memory key)"
+    },
+    "lib-vault": {
+      "sub": "доступ до зашифрованого vault, тримає ключ у пам'яті"
+    },
+    "lib-crypto": {
+      "sub": "низькорівневі crypto-операції (KDF, AEAD)"
+    },
+    "lib-encrypted-adapter": {
+      "sub": "Prisma adapter поверх SQLCipher"
+    },
+    "lib-migrator": {
+      "sub": "застосування міграцій на зашифрованій БД"
+    }
+  },
+  "moduleAssignment": {
+    "page-settings": "m-auth",
+    "page-home": "m-auth",
+    "api-user": "m-auth",
+    "page-dashboard": "m-anal",
+    "page-analytics": "m-anal",
+    "comp-dailychart": "m-anal",
+    "comp-spendingchart": "m-anal",
+    "comp-monthcomparison": "m-anal",
+    "lib-usemonthcomparison": "m-anal",
+    "page-transactions-new": "m-cat",
+    "comp-categorydropdown": "m-cat",
+    "lib-mcc": "m-cat",
+    "api-categories": "m-cat",
+    "api-transactions-overrides": "m-cat",
+    "page-budgets": "m-budg",
+    "comp-budgetalertbanner": "m-budg",
+    "comp-budgetprogresscard": "m-budg",
+    "lib-budgets": "m-budg",
+    "page-accounts": "m-net",
+    "page-net-worth": "m-net",
+    "comp-accountcard": "m-net",
+    "comp-accountfilter": "m-net",
+    "lib-accounts": "m-net",
+    "api-manual-accounts": "m-net",
+    "api-manual-transactions": "m-net",
+    "lib-currency": "m-cur",
+    "lib-hooks": "m-cur",
+    "api-monobank-currency": "m-cur",
+    "comp-refreshbutton": "m-sync",
+    "comp-dataprovider": "m-sync",
+    "lib-monobank": "m-sync",
+    "lib-prisma": "m-sync",
+    "api-monobank-client-info": "m-sync",
+    "api-monobank-statement": "m-sync",
+    "api-monobank-webhook": "m-sync",
+    "api-transactions-backfill": "m-sync",
+    "api-transactions-history": "m-sync",
+    "api-settings-ai": "m-ai",
+    "api-export": "m-io",
+    "api-import": "m-io",
+    "comp-sidebar": null,
+    "comp-themeprovider": null,
+    "comp-toast": null,
+
+    "page-login": "m-auth",
+    "page-setup": "m-auth",
+    "api-auth-login": "m-auth",
+    "api-auth-logout": "m-auth",
+    "api-auth-me": "m-auth",
+    "api-auth-status": "m-auth",
+    "api-auth-setup": "m-auth",
+    "api-auth-change-password": "m-auth",
+    "api-auth-recover": "m-auth",
+    "lib-passwords": "m-auth",
+    "lib-bootstrap": "m-auth",
+    "lib-session": "m-auth",
+
+    "lib-vault": "m-vault",
+    "lib-crypto": "m-vault",
+    "lib-encrypted-adapter": "m-vault",
+    "lib-migrator": "m-vault"
+  },
+  "modules": [
+    {
+      "id": "m-auth",
+      "name": "Auth & Onboarding",
+      "icon": "⚿",
+      "color": "#4ade80",
+      "col": 0,
+      "row": 0,
+      "sub": "Setup · login · session · Monobank token",
+      "foot": "Точка входу",
+      "description": "Точка входу і ідентифікації користувача: на /setup він уперше створює майстер-пароль (це створює зашифрований vault), потім на /login вводить пароль щоб розшифрувати БД для поточної сесії, і вже в Settings прив'язує свій Monobank токен. Усі інші модулі залежать від цього: без активної сесії БД зашифрована і недоступна, а без Monobank токена нема що синхронізувати."
+    },
+    {
+      "id": "m-sync",
+      "name": "Bank Sync",
+      "icon": "⇅",
+      "color": "#fbbf24",
+      "col": 1,
+      "row": 0,
+      "sub": "Інтеграція з Monobank + Prisma persistence",
+      "foot": "Постачальник транзакцій",
+      "description": "Серце аппки: тягне з Monobank інформацію про рахунки, виписки за період та real-time webhook-и, і фоном зберігає все у SQLite через Prisma. Користувач натискає Refresh або відкриває Dashboard — і свіжі транзакції одразу з'являються всюди. Це постачальник даних, від якого живуть Categorization, Budgets, Analytics і Net Worth."
+    },
+    {
+      "id": "m-ai",
+      "name": "AI Assistant",
+      "icon": "✦",
+      "color": "#a78bfa",
+      "col": 2,
+      "row": 0,
+      "sub": "Готовність до автоклассифікації",
+      "foot": "Опційно",
+      "description": "Інфраструктурний модуль: дозволяє користувачу зберегти власний OpenAI API ключ у своєму профілі, який пізніше використовуватиметься для автоматичного присвоєння категорій незрозумілим транзакціям. Зараз — опційний і не задіяний активно, але вже готовий розширити Categorization без зміни архітектури."
+    },
+    {
+      "id": "m-cat",
+      "name": "Categorization",
+      "icon": "#",
+      "color": "#f472b6",
+      "col": 0,
+      "row": 1,
+      "sub": "MCC + custom + overrides",
+      "foot": "Чим є кожна транзакція",
+      "description": "Перетворює сирі банківські транзакції на щось зрозуміле: автоматично присвоює одну з 15 категорій за MCC-кодом, а коли користувач не згоден — створює власну категорію та override для конкретної транзакції. Це фундамент для Budgets (ліміти по категоріях) і Analytics (графіки витрат); без коректних категорій ці модулі мають мало сенсу."
+    },
+    {
+      "id": "m-budg",
+      "name": "Budgets",
+      "icon": "◐",
+      "color": "#60a5fa",
+      "col": 1,
+      "row": 1,
+      "sub": "Ліміти · алерти · прогрес",
+      "foot": "Контроль витрат",
+      "description": "Дозволяє користувачу встановити місячні ліміти витрат по категоріях і отримувати попередження, коли він наближається або перевищує їх. Прогрес-картки показують стан кожного бюджета, а банер на Dashboard видає швидкий сигнал тривоги. Це інструмент самодисципліни — перетворює пасивний перегляд транзакцій на активне планування."
+    },
+    {
+      "id": "m-anal",
+      "name": "Analytics",
+      "icon": "≋",
+      "color": "#38bdf8",
+      "col": 2,
+      "row": 1,
+      "sub": "Графіки витрат · порівняння",
+      "foot": "Розуміння поведінки",
+      "description": "Візуалізує фінансову поведінку: щоденна гістограма витрат, pie chart за категоріями, порівняння поточного місяця з минулим. Користувач приходить сюди щоб зрозуміти куди йдуть гроші і виявити тенденції — модуль не змінює даних, тільки агрегує. Це двигун сценаріїв \"щоденна перевірка\" і \"місячне планування\"."
+    },
+    {
+      "id": "m-net",
+      "name": "Net Worth & Accounts",
+      "icon": "$",
+      "color": "#c084fc",
+      "col": 0,
+      "row": 2,
+      "sub": "Активи − пасиви, ручний облік",
+      "foot": "Повна фінансова картина",
+      "description": "Дозволяє додати поза-Monobank рахунки — депозити, кредити, готівку, інвестиції — як ручні asset/liability записи з власними транзакціями, і показує загальний чистий капітал (активи мінус пасиви). Робить аппку повноцінним фінансовим менеджером замість простого переглядача Monobank-виписки."
+    },
+    {
+      "id": "m-cur",
+      "name": "Currency & FX",
+      "icon": "₴",
+      "color": "#fb923c",
+      "col": 1,
+      "row": 2,
+      "sub": "Мульти-валюта + кеш курсів",
+      "foot": "Конверсії та формат",
+      "description": "Обслуговує мульти-валютність: тягне курси з Monobank `/bank/currency` з кешем 5 хв, форматує суми з правильним символом валюти, конвертує значення для Net Worth і Analytics. Більшість користувачів про нього не думають — він мовчазно працює коли в когось є рахунки в EUR/USD або інвестиції в іноземних активах."
+    },
+    {
+      "id": "m-io",
+      "name": "Data I/O",
+      "icon": "⇄",
+      "color": "#f87171",
+      "col": 2,
+      "row": 2,
+      "sub": "Експорт / Імпорт",
+      "foot": "Резерв і перенос",
+      "description": "Експорт і імпорт транзакцій у CSV/JSON: для бекапу, переїзду на нову інсталяцію або зовнішнього аналізу в Excel. Це модуль \"виходу з замкненої системи\" — гарантія, що дані користувача не залежать від цієї конкретної аппки і завжди залишаються його власністю."
+    },
+    {
+      "id": "m-vault",
+      "name": "Vault & Encryption",
+      "icon": "⌬",
+      "color": "#14b8a6",
+      "col": 1,
+      "row": 3,
+      "sub": "SQLCipher whole-DB encryption",
+      "foot": "Захист даних користувача",
+      "description": "Реалізує password-derived шифрування цілої БД (SQLCipher): пароль користувача через KDF перетворюється на ключ, який тримається у пам'яті процесу тільки на час сесії, і саме ним розшифровується кожен запит Prisma через спеціальний адаптер. Жоден байт фінансових даних не лежить на диску у відкритому вигляді — без правильного пароля БД виглядає як шум, тому втрата пароля = втрата даних."
+    }
+  ],
+  "moduleEdges": [
+    {
+      "from": "m-auth",
+      "to": "m-vault",
+      "label": "password → key"
+    },
+    {
+      "from": "m-vault",
+      "to": "m-sync",
+      "label": "розшифрована БД"
+    },
+    {
+      "from": "m-auth",
+      "to": "m-sync",
+      "label": "token"
+    },
+    {
+      "from": "m-auth",
+      "to": "m-ai",
+      "label": "userId"
+    },
+    {
+      "from": "m-sync",
+      "to": "m-cat",
+      "label": "транзакції"
+    },
+    {
+      "from": "m-sync",
+      "to": "m-anal",
+      "label": "транзакції"
+    },
+    {
+      "from": "m-sync",
+      "to": "m-budg",
+      "label": "транзакції"
+    },
+    {
+      "from": "m-sync",
+      "to": "m-net",
+      "label": "баланси"
+    },
+    {
+      "from": "m-cat",
+      "to": "m-budg",
+      "label": "категорія → ліміт"
+    },
+    {
+      "from": "m-cat",
+      "to": "m-anal",
+      "label": "категорія → графік"
+    },
+    {
+      "from": "m-cur",
+      "to": "m-anal",
+      "label": "курси"
+    },
+    {
+      "from": "m-cur",
+      "to": "m-net",
+      "label": "конверсія"
+    },
+    {
+      "from": "m-cur",
+      "to": "m-sync",
+      "label": "коди валют"
+    },
+    {
+      "from": "m-ai",
+      "to": "m-cat",
+      "label": "автоклас (план)"
+    },
+    {
+      "from": "m-io",
+      "to": "m-sync",
+      "label": "імпорт"
+    },
+    {
+      "from": "m-anal",
+      "to": "m-io",
+      "label": "експорт"
+    },
+    {
+      "from": "m-net",
+      "to": "m-anal",
+      "label": "чистий капітал"
+    }
+  ],
+  "flows": {
+    "auth": {
+      "name": "Auth · вхід з токеном",
+      "color": "#4ade80",
+      "desc": "Користувач вводить Monobank токен у Settings → upsert User → userId зберігається у localStorage → DataProvider підхоплює.",
+      "steps": [
+        {
+          "from": "page-settings",
+          "to": "comp-dataprovider",
+          "label": "token"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "api-user",
+          "label": "POST /api/user"
+        },
+        {
+          "from": "api-user",
+          "to": "lib-prisma",
+          "label": "User.upsert"
+        },
+        {
+          "from": "lib-prisma",
+          "to": "db-sqlite",
+          "label": "INSERT/UPDATE"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "store-local",
+          "label": "finfast_user_id"
+        },
+        {
+          "from": "page-settings",
+          "to": "comp-dataprovider",
+          "label": "редирект → /dashboard"
+        }
+      ]
+    },
+    "clientInfo": {
+      "name": "Boot · завантаження client-info",
+      "color": "#60a5fa",
+      "desc": "DataProvider при монтуванні тягне акаунти й банки з Monobank, кешує в sessionStorage.",
+      "steps": [
+        {
+          "from": "page-dashboard",
+          "to": "comp-dataprovider",
+          "label": "useData()"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "api-monobank-client-info",
+          "label": "GET /api/monobank/client-info"
+        },
+        {
+          "from": "api-monobank-client-info",
+          "to": "lib-monobank",
+          "label": "getClientInfo(token)"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "ext-mono",
+          "label": "/personal/client-info"
+        },
+        {
+          "from": "ext-mono",
+          "to": "lib-monobank",
+          "label": "accounts[], jars[]"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "api-monobank-client-info",
+          "label": "json"
+        },
+        {
+          "from": "api-monobank-client-info",
+          "to": "comp-dataprovider",
+          "label": "client"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "store-session",
+          "label": "кеш TTL 60s"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "page-dashboard",
+          "label": "render"
+        }
+      ]
+    },
+    "sync": {
+      "name": "Sync · ручне оновлення транзакцій",
+      "color": "#fbbf24",
+      "desc": "RefreshButton → fetchStatements: для кожного рахунка виписка з Monobank, upsert у БД, кеш, UI.",
+      "steps": [
+        {
+          "from": "comp-refreshbutton",
+          "to": "comp-dataprovider",
+          "label": "refresh()"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "api-monobank-statement",
+          "label": "GET /api/monobank/statement"
+        },
+        {
+          "from": "api-monobank-statement",
+          "to": "lib-monobank",
+          "label": "getStatement()"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "ext-mono",
+          "label": "/personal/statement/{id}/{from}/{to}"
+        },
+        {
+          "from": "ext-mono",
+          "to": "lib-monobank",
+          "label": "transactions[]"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "api-monobank-statement",
+          "label": "json"
+        },
+        {
+          "from": "api-monobank-statement",
+          "to": "lib-prisma",
+          "label": "Transaction.upsert (фон)"
+        },
+        {
+          "from": "lib-prisma",
+          "to": "db-sqlite",
+          "label": "INSERT/UPDATE"
+        },
+        {
+          "from": "api-monobank-statement",
+          "to": "comp-dataprovider",
+          "label": "statements"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "store-session",
+          "label": "кеш TTL 5хв"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "page-transactions-new",
+          "label": "render"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "page-dashboard",
+          "label": "render"
+        }
+      ]
+    },
+    "override": {
+      "name": "Override · змінити категорію транзакції",
+      "color": "#c084fc",
+      "desc": "Користувач у списку транзакцій змінює категорію → upsert TransactionOverride → перерахунок ефективної категорії.",
+      "steps": [
+        {
+          "from": "page-transactions-new",
+          "to": "comp-categorydropdown",
+          "label": "клік по категорії"
+        },
+        {
+          "from": "comp-categorydropdown",
+          "to": "comp-dataprovider",
+          "label": "setOverride()"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "api-transactions-overrides",
+          "label": "PUT /api/transactions/overrides"
+        },
+        {
+          "from": "api-transactions-overrides",
+          "to": "lib-prisma",
+          "label": "upsert"
+        },
+        {
+          "from": "lib-prisma",
+          "to": "db-sqlite",
+          "label": "INSERT/UPDATE"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "api-transactions-overrides",
+          "label": "GET refresh"
+        },
+        {
+          "from": "api-transactions-overrides",
+          "to": "comp-dataprovider",
+          "label": "overrides{}"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "lib-mcc",
+          "label": "getEffectiveCategory()"
+        },
+        {
+          "from": "lib-mcc",
+          "to": "page-transactions-new",
+          "label": "re-render"
+        }
+      ]
+    },
+    "budgets": {
+      "name": "Budgets · ліміти та алерти",
+      "color": "#f472b6",
+      "desc": "Бюджети живуть у localStorage. Транзакції фільтруються по місяцю → стан ok/warning/exceeded → банер та прогрес-картки.",
+      "steps": [
+        {
+          "from": "page-budgets",
+          "to": "lib-budgets",
+          "label": "useBudgets()"
+        },
+        {
+          "from": "lib-budgets",
+          "to": "store-local",
+          "label": "finfast_budgets"
+        },
+        {
+          "from": "store-local",
+          "to": "lib-budgets",
+          "label": "limits{}"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "lib-budgets",
+          "label": "statements + overrides"
+        },
+        {
+          "from": "lib-budgets",
+          "to": "comp-budgetprogresscard",
+          "label": "BudgetStatus[]"
+        },
+        {
+          "from": "comp-budgetprogresscard",
+          "to": "page-budgets",
+          "label": "render"
+        },
+        {
+          "from": "comp-budgetalertbanner",
+          "to": "page-dashboard",
+          "label": "AlertBanner"
+        }
+      ]
+    },
+    "backfill": {
+      "name": "Backfill · підвантажити попередній місяць",
+      "color": "#fb923c",
+      "desc": "Settings → backfill: для кожного account-id тягнемо statement за минулий місяць і записуємо в БД.",
+      "steps": [
+        {
+          "from": "page-settings",
+          "to": "api-transactions-backfill",
+          "label": "POST /api/transactions/backfill"
+        },
+        {
+          "from": "api-transactions-backfill",
+          "to": "lib-monobank",
+          "label": "getStatement() ×N"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "ext-mono",
+          "label": "/personal/statement (минулий місяць)"
+        },
+        {
+          "from": "ext-mono",
+          "to": "lib-monobank",
+          "label": "transactions[]"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "api-transactions-backfill",
+          "label": "json"
+        },
+        {
+          "from": "api-transactions-backfill",
+          "to": "lib-prisma",
+          "label": "Transaction.upsert ×N"
+        },
+        {
+          "from": "lib-prisma",
+          "to": "db-sqlite",
+          "label": "bulk INSERT"
+        },
+        {
+          "from": "api-transactions-backfill",
+          "to": "page-settings",
+          "label": "persisted: N"
+        }
+      ]
+    },
+    "rates": {
+      "name": "Currency · курси валют (з кешем)",
+      "color": "#38bdf8",
+      "desc": "useCurrencyRates → серверна обгортка з server-side cache → Monobank /bank/currency.",
+      "steps": [
+        {
+          "from": "page-dashboard",
+          "to": "lib-hooks",
+          "label": "useCurrencyRates()"
+        },
+        {
+          "from": "lib-hooks",
+          "to": "api-monobank-currency",
+          "label": "GET /api/monobank/currency"
+        },
+        {
+          "from": "api-monobank-currency",
+          "to": "lib-monobank",
+          "label": "getCurrencyRates()"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "ext-mono",
+          "label": "/bank/currency"
+        },
+        {
+          "from": "ext-mono",
+          "to": "lib-monobank",
+          "label": "rates[]"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "api-monobank-currency",
+          "label": "json (cache)"
+        },
+        {
+          "from": "api-monobank-currency",
+          "to": "lib-hooks",
+          "label": "rates"
+        },
+        {
+          "from": "lib-hooks",
+          "to": "page-dashboard",
+          "label": "render"
+        }
+      ]
+    },
+    "ai": {
+      "name": "AI key · збереження OpenAI ключа",
+      "color": "#a78bfa",
+      "desc": "Користувач у Settings вводить OpenAI API ключ → upsert у БД (per user).",
+      "steps": [
+        {
+          "from": "page-settings",
+          "to": "api-settings-ai",
+          "label": "PUT /api/settings/ai"
+        },
+        {
+          "from": "api-settings-ai",
+          "to": "lib-prisma",
+          "label": "User.openaiApiKey = …"
+        },
+        {
+          "from": "lib-prisma",
+          "to": "db-sqlite",
+          "label": "UPDATE User"
+        },
+        {
+          "from": "api-settings-ai",
+          "to": "ext-openai",
+          "label": "(майбутній виклик)"
+        }
+      ]
+    }
+  },
+  "journeys": {
+    "newUser": {
+      "name": "Новий користувач",
+      "color": "#4ade80",
+      "desc": "Перший запуск: вводить токен і одразу бачить свої гроші.",
+      "steps": [
+        {
+          "module": "m-auth",
+          "label": "вводить Monobank токен"
+        },
+        {
+          "module": "m-sync",
+          "label": "автозавантаження client-info"
+        },
+        {
+          "module": "m-cur",
+          "label": "підвантаження курсів"
+        },
+        {
+          "module": "m-anal",
+          "label": "перший огляд Dashboard"
+        }
+      ]
+    },
+    "dailyCheck": {
+      "name": "Щоденна перевірка",
+      "color": "#fbbf24",
+      "desc": "Refresh → свіжі транзакції → перевірка бюджетів і графіків.",
+      "steps": [
+        {
+          "module": "m-sync",
+          "label": "RefreshButton → нові транзакції"
+        },
+        {
+          "module": "m-cat",
+          "label": "MCC → категорія"
+        },
+        {
+          "module": "m-budg",
+          "label": "перерахунок витрат · алерти"
+        },
+        {
+          "module": "m-anal",
+          "label": "оновлення графіків"
+        }
+      ]
+    },
+    "reclassify": {
+      "name": "Перекатегоризація",
+      "color": "#f472b6",
+      "desc": "Помилкова MCC категорія → користувач створив свою і виправив.",
+      "steps": [
+        {
+          "module": "m-anal",
+          "label": "побачив дивний витрат"
+        },
+        {
+          "module": "m-cat",
+          "label": "створив custom + override"
+        },
+        {
+          "module": "m-budg",
+          "label": "бюджет перерахувався"
+        },
+        {
+          "module": "m-anal",
+          "label": "графік виправився"
+        }
+      ]
+    },
+    "monthlyPlan": {
+      "name": "Місячне планування",
+      "color": "#60a5fa",
+      "desc": "Кінець місяця: порівняння і оновлення лімітів на наступний.",
+      "steps": [
+        {
+          "module": "m-anal",
+          "label": "Month Comparison"
+        },
+        {
+          "module": "m-budg",
+          "label": "коригує ліміти"
+        },
+        {
+          "module": "m-cat",
+          "label": "уточнює категорії"
+        }
+      ]
+    },
+    "netWorth": {
+      "name": "Облік активів і кредитів",
+      "color": "#c084fc",
+      "desc": "Додає депозит і кредит вручну, бачить чистий капітал з конверсією валют.",
+      "steps": [
+        {
+          "module": "m-net",
+          "label": "додає manual account"
+        },
+        {
+          "module": "m-cur",
+          "label": "конверсія у базову валюту"
+        },
+        {
+          "module": "m-anal",
+          "label": "Net Worth"
+        }
+      ]
+    },
+    "backup": {
+      "name": "Backup і відновлення",
+      "color": "#f87171",
+      "desc": "Експортує транзакції; імпортує у нову інсталяцію.",
+      "steps": [
+        {
+          "module": "m-anal",
+          "label": "вибирає період"
+        },
+        {
+          "module": "m-io",
+          "label": "експорт JSON/CSV"
+        },
+        {
+          "module": "m-sync",
+          "label": "імпорт у нову інсталяцію"
+        }
+      ]
+    },
+    "setupAI": {
+      "name": "Підключення AI",
+      "color": "#a78bfa",
+      "desc": "Зберігає OpenAI ключ для майбутньої автоклассифікації.",
+      "steps": [
+        {
+          "module": "m-auth",
+          "label": "в Settings"
+        },
+        {
+          "module": "m-ai",
+          "label": "зберігає API ключ"
+        },
+        {
+          "module": "m-cat",
+          "label": "(майбутнє) автоклассифікація"
+        }
+      ]
+    }
+  }
+}

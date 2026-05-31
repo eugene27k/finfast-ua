@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/components/ThemeProvider";
+import { useData } from "@/components/DataProvider";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Головна", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { theme, toggle } = useTheme();
+  const { logout } = useData();
 
   return (
     <aside className="w-64 bg-gray-900 dark:bg-gray-950 text-white min-h-screen flex flex-col">
@@ -61,6 +63,16 @@ export default function Sidebar() {
             </svg>
           )}
           {theme === "dark" ? "Світла тема" : "Темна тема"}
+        </button>
+        <button
+          onClick={logout}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-red-900/30 hover:text-red-300 transition-colors w-full mt-1"
+          title="Вийти з акаунта"
+        >
+          <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+          </svg>
+          Вийти
         </button>
       </div>
     </aside>

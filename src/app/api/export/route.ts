@@ -1,28 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth/session";
 
 const FORMAT_VERSION = 1;
 
 export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId");
-  if (!userId) {
-    return NextResponse.json({ error: "userId is required" }, { status: 400 });
-  }
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const userId = auth.userId;
 
   try {
+    const db = getDb();
     const [transactions, categories, overrides, manualAccountsRaw] = await Promise.all([
-      prisma.transaction.findMany({
+      db.transaction.findMany({
         where: { userId },
         orderBy: { time: "desc" },
       }),
-      prisma.customCategory.findMany({
+      db.customCategory.findMany({
         where: { userId },
         orderBy: { createdAt: "asc" },
       }),
-      prisma.transactionOverride.findMany({
+      db.transactionOverride.findMany({
         where: { userId },
       }),
-      prisma.manualAccount.findMany({
+      db.manualAccount.findMany({
         where: { userId },
         include: { transactions: { orderBy: { time: "desc" } } },
       }),
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
       color: rest.color,
     }));
 
-    // Map overrides: keep transactionId + categoryId (resolved by name on import)
+    // Map overrides: keep transactionId + categoryName (resolved by name on import)
     const catIdToName: Record<string, string> = {};
     for (const c of categories) catIdToName[c.id] = c.name;
 

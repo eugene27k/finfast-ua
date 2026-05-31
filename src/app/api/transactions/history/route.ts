@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
   const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("userId");
   const from = searchParams.get("from");
   const to = searchParams.get("to");
   const accountIdParam = searchParams.get("accountId");
 
-  if (!userId || !from || !to) {
+  if (!from || !to) {
     return NextResponse.json(
-      { error: "userId, from, and to are required" },
+      { error: "from and to are required" },
       { status: 400 }
     );
   }
@@ -22,9 +25,9 @@ export async function GET(request: NextRequest) {
     : undefined;
 
   try {
-    const transactions = await prisma.transaction.findMany({
+    const transactions = await getDb().transaction.findMany({
       where: {
-        userId,
+        userId: auth.userId,
         time: { gte: fromTs, lte: toTs },
         ...(accountIds && accountIds.length > 0
           ? { accountId: { in: accountIds } }

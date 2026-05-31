@@ -1,0 +1,3406 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Finfast UA — Архітектура та потоки даних</title>
+<style>
+  :root {
+    --bg-0: #050816;
+    --bg-1: #0b1029;
+    --bg-2: #131a3d;
+    --grid: rgba(120, 140, 220, 0.06);
+    --text: #e4ecff;
+    --muted: #8da0c8;
+    --line: rgba(140, 170, 230, 0.18);
+    --line-hot: rgba(255, 255, 255, 0.55);
+
+    --c-ui:        #4ade80;   /* UI Pages */
+    --c-comp:      #60a5fa;   /* Components */
+    --c-state:     #c084fc;   /* Context/State */
+    --c-api:       #fbbf24;   /* API Routes */
+    --c-lib:       #f472b6;   /* Lib modules */
+    --c-store:     #fb923c;   /* Storage */
+    --c-ext:       #f87171;   /* External */
+    --c-db:        #38bdf8;   /* Database */
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100vh;
+    background:
+      radial-gradient(1200px 800px at 20% 0%, rgba(96, 165, 250, 0.10), transparent 60%),
+      radial-gradient(1000px 700px at 100% 100%, rgba(192, 132, 252, 0.10), transparent 60%),
+      linear-gradient(180deg, var(--bg-0), var(--bg-1));
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000 60%, transparent 100%);
+  }
+
+  header {
+    position: relative; z-index: 2;
+    padding: 28px 32px 8px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 24px; flex-wrap: wrap;
+  }
+  .title {
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .title h1 {
+    margin: 0;
+    font-size: 26px;
+    letter-spacing: 0.4px;
+    background: linear-gradient(90deg, #fff, #a5b4fc 60%, #c4b5fd);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .title p { margin: 0; color: var(--muted); font-size: 13px; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 10px 14px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 10px 14px; border-radius: 12px;
+    backdrop-filter: blur(6px);
+  }
+  .legend .item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .legend .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    box-shadow: 0 0 12px currentColor;
+  }
+
+  .flows {
+    position: relative; z-index: 2;
+    margin: 14px 32px 0;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  }
+  .flows .label { color: var(--muted); font-size: 12px; margin-right: 4px; }
+  .flow-btn {
+    appearance: none; border: 1px solid rgba(255,255,255,0.1);
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    color: var(--text); font-size: 13px; padding: 8px 14px; border-radius: 999px;
+    cursor: pointer; transition: all .2s ease; letter-spacing: 0.2px;
+  }
+  .flow-btn:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.25); }
+  .flow-btn.active {
+    background: linear-gradient(180deg, rgba(96,165,250,0.35), rgba(96,165,250,0.15));
+    border-color: rgba(96,165,250,0.6);
+    box-shadow: 0 0 20px rgba(96,165,250,0.25);
+  }
+  .flow-btn.pause.active {
+    background: linear-gradient(180deg, rgba(248,113,113,0.35), rgba(248,113,113,0.15));
+    border-color: rgba(248,113,113,0.6);
+    box-shadow: 0 0 20px rgba(248,113,113,0.25);
+  }
+  .flow-btn.showall.active {
+    background: linear-gradient(180deg, rgba(192,132,252,0.35), rgba(192,132,252,0.15));
+    border-color: rgba(192,132,252,0.65);
+    box-shadow: 0 0 22px rgba(192,132,252,0.3);
+  }
+  .flow-btn.spacer { margin-left: auto; pointer-events: none; padding: 0; border: 0; background: transparent; }
+  .flow-btn.auto { /* auto inherits trailing flow */ }
+
+  .canvas-wrap {
+    position: relative; z-index: 1;
+    width: 100%;
+    margin-top: 18px;
+    padding: 0 24px 32px;
+  }
+  .canvas {
+    position: relative;
+    width: 100%;
+    height: 1380px;
+    border-radius: 22px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background:
+      radial-gradient(800px 500px at 10% 0%, rgba(74,222,128,0.06), transparent 60%),
+      radial-gradient(800px 500px at 100% 100%, rgba(248,113,113,0.07), transparent 60%),
+      linear-gradient(180deg, rgba(8,12,30,0.65), rgba(13,18,46,0.55));
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.02);
+  }
+  .canvas.modules { height: 1170px; }
+  .view { position: absolute; inset: 0; }
+  .view[hidden] { display: none !important; }
+
+  /* segmented "view" toggle */
+  .view-toggle {
+    display: inline-flex; padding: 4px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 999px;
+    gap: 2px;
+  }
+  .view-toggle button {
+    appearance: none; border: 0;
+    background: transparent;
+    color: var(--muted);
+    padding: 7px 14px; border-radius: 999px;
+    font-size: 13px; cursor: pointer;
+    transition: all .18s ease;
+  }
+  .view-toggle button:hover { color: var(--text); }
+  .view-toggle button.active {
+    background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.04));
+    color: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1);
+  }
+
+  .btn-group { display: contents; }
+  .btn-group[hidden] { display: none !important; }
+
+  /* Module cards (high-level view) */
+  .module {
+    position: absolute;
+    width: 280px;
+    padding: 14px 14px 12px;
+    border-radius: 18px;
+    background:
+      linear-gradient(180deg, color-mix(in oklab, var(--c) 18%, rgba(255,255,255,0.04)) 0%, rgba(255,255,255,0.02) 100%);
+    border: 1px solid color-mix(in oklab, var(--c) 35%, rgba(255,255,255,0.08));
+    color: var(--text);
+    backdrop-filter: blur(6px);
+    transition: transform .25s ease, box-shadow .25s ease, opacity .25s ease, border-color .25s ease;
+    z-index: 3;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  }
+  .module:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+  }
+  .module.dimmed { opacity: 0.25; filter: saturate(0.4); }
+  .module.hot {
+    border-color: var(--c);
+    box-shadow: 0 0 0 1px var(--c), 0 0 32px var(--glow, color-mix(in oklab, var(--c) 35%, transparent));
+  }
+  .module .m-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .module .m-icon {
+    width: 30px; height: 30px;
+    border-radius: 9px;
+    display: grid; place-items: center;
+    background: color-mix(in oklab, var(--c) 25%, rgba(255,255,255,0.04));
+    color: var(--c);
+    font-size: 16px; font-weight: 700;
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--c) 50%, transparent);
+  }
+  .module .m-title { font-size: 14px; font-weight: 700; line-height: 1.15; }
+  .module .m-sub   { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .module .m-list {
+    margin-top: 6px;
+    display: grid; gap: 4px;
+    font-size: 11.5px; color: #c8d4ee;
+    max-height: 168px;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.18) transparent;
+  }
+  .module .m-list::-webkit-scrollbar { width: 6px; }
+  .module .m-list::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.18); border-radius: 3px;
+  }
+  .module .m-list::-webkit-scrollbar-track { background: transparent; }
+  .module .m-list .it {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.03);
+  }
+  .module .m-list .it .tag {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 9.5px;
+    padding: 1px 5px; border-radius: 4px;
+    background: color-mix(in oklab, var(--c) 28%, rgba(255,255,255,0.04));
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .module .m-foot {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(255,255,255,0.08);
+    font-size: 11px; color: var(--muted);
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+
+  .col-label.mod { font-size: 10px; opacity: 0.45; }
+
+  svg.edges {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  .col-label {
+    position: absolute;
+    top: 14px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 11px;
+    color: var(--muted);
+    opacity: 0.65;
+    pointer-events: none;
+  }
+
+  .node {
+    position: absolute;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text);
+    backdrop-filter: blur(6px);
+    transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease, opacity .25s ease;
+    cursor: default;
+    user-select: none;
+    z-index: 3;
+  }
+  .node:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255,255,255,0.2);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+  }
+  .node .row { display: flex; align-items: center; gap: 8px; }
+  .node .badge {
+    width: 8px; height: 8px; border-radius: 50%;
+    box-shadow: 0 0 12px currentColor;
+    flex-shrink: 0;
+  }
+  .node .name {
+    font-size: 13px; font-weight: 600; line-height: 1.1;
+  }
+  .node .sub {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.25;
+  }
+
+  .node.dimmed { opacity: 0.25; filter: saturate(0.4); }
+  .node.hot {
+    border-color: currentColor;
+    box-shadow: 0 0 0 1px currentColor, 0 0 26px var(--glow, rgba(255,255,255,0.35));
+  }
+
+  /* node tints by group via inline --c */
+  .node[data-group="ui"]    { --c: var(--c-ui);    color: var(--c-ui);    }
+  .node[data-group="comp"]  { --c: var(--c-comp);  color: var(--c-comp);  }
+  .node[data-group="state"] { --c: var(--c-state); color: var(--c-state); }
+  .node[data-group="api"]   { --c: var(--c-api);   color: var(--c-api);   }
+  .node[data-group="lib"]   { --c: var(--c-lib);   color: var(--c-lib);   }
+  .node[data-group="store"] { --c: var(--c-store); color: var(--c-store); }
+  .node[data-group="ext"]   { --c: var(--c-ext);   color: var(--c-ext);   }
+  .node[data-group="db"]    { --c: var(--c-db);    color: var(--c-db);    }
+  .node .name { color: var(--text); }
+
+  .tooltip {
+    position: fixed;
+    z-index: 100;
+    max-width: 320px;
+    padding: 12px 14px;
+    background: rgba(10, 14, 32, 0.96);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.45;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity .15s ease, transform .15s ease;
+    box-shadow: 0 24px 50px rgba(0,0,0,0.6);
+  }
+  .tooltip.show { opacity: 1; transform: translateY(0); }
+  .tooltip .tt-title { font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .tooltip .tt-kind { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .tooltip .tt-desc {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(255,255,255,0.1);
+    font-size: 12px;
+    line-height: 1.5;
+    color: #cfd9f4;
+  }
+  .tooltip .tt-mod {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(255,255,255,0.1);
+    font-size: 11px;
+  }
+  .tooltip .tt-mod .mod-head {
+    display: flex; align-items: center; gap: 7px;
+    color: #fff; font-weight: 600;
+    margin-bottom: 4px; font-size: 12px;
+  }
+  .tooltip .tt-mod .mod-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    box-shadow: 0 0 8px currentColor;
+    flex-shrink: 0;
+  }
+  .tooltip .tt-mod .mod-tag {
+    font-size: 9.5px;
+    letter-spacing: 1px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-right: 2px;
+  }
+  .tooltip .tt-mod .mod-desc {
+    color: #cfd9f4;
+    line-height: 1.5;
+    font-size: 11.5px;
+  }
+  .tooltip .tt-path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #c4b5fd; margin-top: 6px; word-break: break-all; }
+
+  /* edge styling */
+  .edge { fill: none; stroke: var(--line); stroke-width: 1.2; }
+  .edge.hot { stroke: var(--line-hot); stroke-width: 1.8; }
+  .edge-glow { fill: none; stroke: rgba(255,255,255,0.0); stroke-width: 8; }
+
+  .particle {
+    fill: #fff;
+    filter: drop-shadow(0 0 4px currentColor);
+  }
+
+  .flow-status {
+    position: absolute;
+    left: 50%; transform: translateX(-50%);
+    bottom: 18px;
+    padding: 8px 14px;
+    background: rgba(10,14,32,0.85);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 999px;
+    color: var(--text); font-size: 12px;
+    display: flex; align-items: center; gap: 10px;
+    opacity: 0; transition: opacity .2s ease;
+    pointer-events: none;
+  }
+  .flow-status.show { opacity: 1; }
+  .flow-status .pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #4ade80;
+    box-shadow: 0 0 12px #4ade80;
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1);   opacity: 1;   }
+    50%      { transform: scale(1.6); opacity: 0.5; }
+  }
+
+  footer {
+    position: relative; z-index: 2;
+    padding: 8px 32px 28px;
+    color: var(--muted); font-size: 12px;
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  footer code {
+    background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;
+    color: #c4b5fd;
+  }
+
+  @media (max-width: 1100px) {
+    .canvas { height: 1800px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">
+    <h1>Finfast UA — Архітектура та живі потоки даних</h1>
+    <p>Інтерактивна мапа: натисни на потік щоб побачити як дані ходять між UI, API, Monobank та базою.</p>
+  </div>
+  <div class="legend" id="legend"></div>
+</header>
+
+<div class="flows" id="flows">
+  <div class="view-toggle" id="viewToggle">
+    <button data-view="arch" class="active">Архітектура</button>
+    <button data-view="modules">Модулі</button>
+  </div>
+  <span class="label" id="ctrlLabel">Потоки:</span>
+  <!-- кнопки додає JS у дві групи (arch / modules) -->
+</div>
+
+<div class="canvas-wrap">
+  <div class="canvas" id="canvas">
+    <div class="view" id="viewArch">
+      <svg class="edges" id="edges" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="view" id="viewModules" hidden>
+      <svg class="edges" id="edgesM" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="flow-status" id="status"><span class="pulse"></span><span id="statusText">Готовий</span></div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<footer>
+  <div>
+    Next.js 15 · React 19 · Prisma 7 · SQLite · Monobank API · OpenAI · Tailwind 4
+    <span id="genStamp" style="margin-left:14px;color:#7185b0"></span>
+  </div>
+  <div>Перемикач <code>Архітектура · Модулі</code> — рівень деталізації · <code>Бачити все</code> — паралельні потоки/сценарії · <code>⏸ Пауза</code> / <code>Space</code> — заморозити · <code>Авто</code> — циклічна демонстрація.</div>
+</footer>
+
+<!-- Дані архітектури автоматично генеруються через `node scripts/generate-architecture.js`
+     (запускається через predev/prebuild у package.json).
+     Цей блок переписується кожного разу при генерації. -->
+<script id="arch-data" type="application/json">
+{
+  "generatedAt": "2026-05-31T21:42:42.621Z",
+  "cols": {
+    "ui": {
+      "x": 8,
+      "label": "Pages"
+    },
+    "comp": {
+      "x": 26,
+      "label": "Components"
+    },
+    "api": {
+      "x": 48,
+      "label": "API Routes"
+    },
+    "lib": {
+      "x": 70,
+      "label": "Lib / ORM"
+    },
+    "ext": {
+      "x": 90,
+      "label": "External · DB · Storage"
+    }
+  },
+  "nodes": [
+    {
+      "id": "page-accounts",
+      "group": "ui",
+      "kind": "page",
+      "name": "Accounts",
+      "sub": "/accounts · перелік рахунків",
+      "path": "src/app/(app)/accounts/page.tsx",
+      "url": "/accounts",
+      "col": "ui",
+      "y": 80,
+      "module": "m-net"
+    },
+    {
+      "id": "page-analytics",
+      "group": "ui",
+      "kind": "page",
+      "name": "Analytics",
+      "sub": "/analytics · Daily, Spending, Month Cmp",
+      "path": "src/app/(app)/analytics/page.tsx",
+      "url": "/analytics",
+      "col": "ui",
+      "y": 160,
+      "module": "m-anal"
+    },
+    {
+      "id": "page-budgets",
+      "group": "ui",
+      "kind": "page",
+      "name": "Budgets",
+      "sub": "/budgets · ліміти, алерти, прогрес",
+      "path": "src/app/(app)/budgets/page.tsx",
+      "url": "/budgets",
+      "col": "ui",
+      "y": 240,
+      "module": "m-budg"
+    },
+    {
+      "id": "page-dashboard",
+      "group": "ui",
+      "kind": "page",
+      "name": "Dashboard",
+      "sub": "/dashboard · баланс, акаунти, курси, бюджети",
+      "path": "src/app/(app)/dashboard/page.tsx",
+      "url": "/dashboard",
+      "col": "ui",
+      "y": 320,
+      "module": "m-anal"
+    },
+    {
+      "id": "page-net-worth",
+      "group": "ui",
+      "kind": "page",
+      "name": "Net Worth",
+      "sub": "/net-worth · активи − пасиви",
+      "path": "src/app/(app)/net-worth/page.tsx",
+      "url": "/net-worth",
+      "col": "ui",
+      "y": 560,
+      "module": "m-net"
+    },
+    {
+      "id": "page-settings",
+      "group": "ui",
+      "kind": "page",
+      "name": "Settings",
+      "sub": "/settings · token, OpenAI key, категорії",
+      "path": "src/app/(app)/settings/page.tsx",
+      "url": "/settings",
+      "col": "ui",
+      "y": 640,
+      "module": "m-auth"
+    },
+    {
+      "id": "page-transactions-new",
+      "group": "ui",
+      "kind": "page",
+      "name": "Transactions",
+      "sub": "/transactions-new · фільтри, override",
+      "path": "src/app/(app)/transactions-new/page.tsx",
+      "url": "/transactions-new",
+      "col": "ui",
+      "y": 800,
+      "module": "m-cat"
+    },
+    {
+      "id": "page-login",
+      "group": "ui",
+      "kind": "page",
+      "name": "Login",
+      "sub": "/login · вхід з майстер-паролем",
+      "path": "src/app/login/page.tsx",
+      "url": "/login",
+      "col": "ui",
+      "y": 480,
+      "module": "m-auth"
+    },
+    {
+      "id": "page-home",
+      "group": "ui",
+      "kind": "page",
+      "name": "Home (redirect)",
+      "sub": "/ → /dashboard або /settings",
+      "path": "src/app/page.tsx",
+      "url": "/",
+      "col": "ui",
+      "y": 400,
+      "module": "m-auth"
+    },
+    {
+      "id": "page-setup",
+      "group": "ui",
+      "kind": "page",
+      "name": "Setup",
+      "sub": "/setup · перший запуск · створення майстер-пароля",
+      "path": "src/app/setup/page.tsx",
+      "url": "/setup",
+      "col": "ui",
+      "y": 720,
+      "module": "m-auth"
+    },
+    {
+      "id": "api-auth-change-password",
+      "group": "api",
+      "kind": "api",
+      "name": "POST /api/auth/change-password",
+      "sub": "POST · змінити пароль (rewrap key)",
+      "path": "src/app/api/auth/change-password/route.ts",
+      "url": "/api/auth/change-password",
+      "methods": [
+        "POST"
+      ],
+      "col": "api",
+      "y": 960,
+      "module": "m-auth"
+    },
+    {
+      "id": "api-auth-login",
+      "group": "api",
+      "kind": "api",
+      "name": "POST /api/auth/login",
+      "sub": "POST · перевіряє пароль, відкриває vault, видає сесію",
+      "path": "src/app/api/auth/login/route.ts",
+      "url": "/api/auth/login",
+      "methods": [
+        "POST"
+      ],
+      "col": "api",
+      "y": 1040,
+      "module": "m-auth"
+    },
+    {
+      "id": "api-auth-logout",
+      "group": "api",
+      "kind": "api",
+      "name": "POST /api/auth/logout",
+      "sub": "POST · знищує сесію та забуває ключ",
+      "path": "src/app/api/auth/logout/route.ts",
+      "url": "/api/auth/logout",
+      "methods": [
+        "POST"
+      ],
+      "col": "api",
+      "y": 1120,
+      "module": "m-auth"
+    },
+    {
+      "id": "api-auth-me",
+      "group": "api",
+      "kind": "api",
+      "name": "GET /api/auth/me",
+      "sub": "GET · поточний користувач",
+      "path": "src/app/api/auth/me/route.ts",
+      "url": "/api/auth/me",
+      "methods": [
+        "GET"
+      ],
+      "col": "api",
+      "y": 80,
+      "module": "m-auth"
+    },
+    {
+      "id": "api-auth-recover",
+      "group": "api",
+      "kind": "api",
+      "name": "POST /api/auth/recover",
+      "sub": "POST · recovery flow (recovery key/phrase)",
+      "path": "src/app/api/auth/recover/route.ts",
+      "url": "/api/auth/recover",
+      "methods": [
+        "POST"
+      ],
+      "col": "api",
+      "y": 1200,
+      "module": "m-auth"
+    },
+    {
+      "id": "api-auth-setup",
+      "group": "api",
+      "kind": "api",
+      "name": "POST /api/auth/setup",
+      "sub": "POST · initial setup vault із паролем",
+      "path": "src/app/api/auth/setup/route.ts",
+      "url": "/api/auth/setup",
+      "methods": [
+        "POST"
+      ],
+      "col": "api",
+      "y": 1280,
+      "module": "m-auth"
+    },
+    {
+      "id": "api-auth-status",
+      "group": "api",
+      "kind": "api",
+      "name": "GET /api/auth/status",
+      "sub": "GET · чи виконано setup, чи активна сесія",
+      "path": "src/app/api/auth/status/route.ts",
+      "url": "/api/auth/status",
+      "methods": [
+        "GET"
+      ],
+      "col": "api",
+      "y": 160,
+      "module": "m-auth"
+    },
+    {
+      "id": "api-categories",
+      "group": "api",
+      "kind": "api",
+      "name": "GET/POST/DELETE /api/categories",
+      "sub": "GET/POST/DELETE custom категорій",
+      "path": "src/app/api/categories/route.ts",
+      "url": "/api/categories",
+      "methods": [
+        "GET",
+        "POST",
+        "DELETE"
+      ],
+      "col": "api",
+      "y": 640,
+      "module": "m-cat"
+    },
+    {
+      "id": "api-export",
+      "group": "api",
+      "kind": "api",
+      "name": "GET /api/export",
+      "sub": "експорт транзакцій (JSON/CSV)",
+      "path": "src/app/api/export/route.ts",
+      "url": "/api/export",
+      "methods": [
+        "GET"
+      ],
+      "col": "api",
+      "y": 240,
+      "module": "m-io"
+    },
+    {
+      "id": "api-import",
+      "group": "api",
+      "kind": "api",
+      "name": "POST /api/import",
+      "sub": "імпорт транзакцій з файлу",
+      "path": "src/app/api/import/route.ts",
+      "url": "/api/import",
+      "methods": [
+        "POST"
+      ],
+      "col": "api",
+      "y": 1360,
+      "module": "m-io"
+    },
+    {
+      "id": "api-manual-accounts",
+      "group": "api",
+      "kind": "api",
+      "name": "GET/POST/DELETE/PUT /api/manual-accounts",
+      "sub": "CRUD ручних рахунків (asset / liability)",
+      "path": "src/app/api/manual-accounts/route.ts",
+      "url": "/api/manual-accounts",
+      "methods": [
+        "GET",
+        "POST",
+        "DELETE",
+        "PUT"
+      ],
+      "col": "api",
+      "y": 720,
+      "module": "m-net"
+    },
+    {
+      "id": "api-manual-transactions",
+      "group": "api",
+      "kind": "api",
+      "name": "POST/DELETE/PUT /api/manual-transactions",
+      "sub": "ручні транзакції",
+      "path": "src/app/api/manual-transactions/route.ts",
+      "url": "/api/manual-transactions",
+      "methods": [
+        "POST",
+        "DELETE",
+        "PUT"
+      ],
+      "col": "api",
+      "y": 1680,
+      "module": "m-net"
+    },
+    {
+      "id": "api-monobank-client-info",
+      "group": "api",
+      "kind": "api",
+      "name": "GET /api/monobank/client-info",
+      "sub": "інфо клієнта: рахунки + банки",
+      "path": "src/app/api/monobank/client-info/route.ts",
+      "url": "/api/monobank/client-info",
+      "methods": [
+        "GET"
+      ],
+      "col": "api",
+      "y": 320,
+      "module": "m-sync"
+    },
+    {
+      "id": "api-monobank-currency",
+      "group": "api",
+      "kind": "api",
+      "name": "GET /api/monobank/currency",
+      "sub": "курси валют з server-side cache",
+      "path": "src/app/api/monobank/currency/route.ts",
+      "url": "/api/monobank/currency",
+      "methods": [
+        "GET"
+      ],
+      "col": "api",
+      "y": 400,
+      "module": "m-cur"
+    },
+    {
+      "id": "api-monobank-statement",
+      "group": "api",
+      "kind": "api",
+      "name": "GET /api/monobank/statement",
+      "sub": "виписка по account за період + фоновий upsert у БД",
+      "path": "src/app/api/monobank/statement/route.ts",
+      "url": "/api/monobank/statement",
+      "methods": [
+        "GET"
+      ],
+      "col": "api",
+      "y": 480,
+      "module": "m-sync"
+    },
+    {
+      "id": "api-monobank-webhook",
+      "group": "api",
+      "kind": "api",
+      "name": "POST /api/monobank/webhook",
+      "sub": "реєстрація webhook для real-time оновлень",
+      "path": "src/app/api/monobank/webhook/route.ts",
+      "url": "/api/monobank/webhook",
+      "methods": [
+        "POST"
+      ],
+      "col": "api",
+      "y": 1440,
+      "module": "m-sync"
+    },
+    {
+      "id": "api-settings-ai",
+      "group": "api",
+      "kind": "api",
+      "name": "GET/PUT /api/settings/ai",
+      "sub": "GET/PUT OpenAI ключа користувача",
+      "path": "src/app/api/settings/ai/route.ts",
+      "url": "/api/settings/ai",
+      "methods": [
+        "GET",
+        "PUT"
+      ],
+      "col": "api",
+      "y": 800,
+      "module": "m-ai"
+    },
+    {
+      "id": "api-transactions-backfill",
+      "group": "api",
+      "kind": "api",
+      "name": "POST /api/transactions/backfill",
+      "sub": "масовий завантажувач попереднього місяця",
+      "path": "src/app/api/transactions/backfill/route.ts",
+      "url": "/api/transactions/backfill",
+      "methods": [
+        "POST"
+      ],
+      "col": "api",
+      "y": 1520,
+      "module": "m-sync"
+    },
+    {
+      "id": "api-transactions-history",
+      "group": "api",
+      "kind": "api",
+      "name": "GET /api/transactions/history",
+      "sub": "транзакції з БД (історія)",
+      "path": "src/app/api/transactions/history/route.ts",
+      "url": "/api/transactions/history",
+      "methods": [
+        "GET"
+      ],
+      "col": "api",
+      "y": 560,
+      "module": "m-sync"
+    },
+    {
+      "id": "api-transactions-overrides",
+      "group": "api",
+      "kind": "api",
+      "name": "GET/PUT /api/transactions/overrides",
+      "sub": "GET/PUT перевизначення категорії транзакції",
+      "path": "src/app/api/transactions/overrides/route.ts",
+      "url": "/api/transactions/overrides",
+      "methods": [
+        "GET",
+        "PUT"
+      ],
+      "col": "api",
+      "y": 880,
+      "module": "m-cat"
+    },
+    {
+      "id": "api-user",
+      "group": "api",
+      "kind": "api",
+      "name": "POST /api/user",
+      "sub": "upsert User за monoToken → userId",
+      "path": "src/app/api/user/route.ts",
+      "url": "/api/user",
+      "methods": [
+        "POST"
+      ],
+      "col": "api",
+      "y": 1600,
+      "module": "m-auth"
+    },
+    {
+      "id": "lib-accounts",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/accounts.ts",
+      "sub": "sortAccounts()",
+      "path": "src/lib/accounts.ts",
+      "col": "lib",
+      "y": 80,
+      "module": "m-net"
+    },
+    {
+      "id": "lib-bootstrap",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/bootstrap.ts",
+      "sub": "ініціалізація vault при першому запуску",
+      "path": "src/lib/auth/bootstrap.ts",
+      "col": "lib",
+      "y": 160,
+      "module": "m-auth"
+    },
+    {
+      "id": "lib-crypto",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/crypto.ts",
+      "sub": "низькорівневі crypto-операції (KDF, AEAD)",
+      "path": "src/lib/auth/crypto.ts",
+      "col": "lib",
+      "y": 320,
+      "module": "m-vault"
+    },
+    {
+      "id": "lib-session",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/session.ts",
+      "sub": "управління сесіями (cookie / in-memory key)",
+      "path": "src/lib/auth/session.ts",
+      "col": "lib",
+      "y": 1040,
+      "module": "m-auth"
+    },
+    {
+      "id": "lib-vault",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/vault.ts",
+      "sub": "доступ до зашифрованого vault, тримає ключ у пам'яті",
+      "path": "src/lib/auth/vault.ts",
+      "col": "lib",
+      "y": 1200,
+      "module": "m-vault"
+    },
+    {
+      "id": "lib-budgets",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/budgets.ts",
+      "sub": "useBudgets() + статуси ok/warning/exceeded",
+      "path": "src/lib/budgets.ts",
+      "col": "lib",
+      "y": 240,
+      "module": "m-budg"
+    },
+    {
+      "id": "lib-currency",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/currency.ts",
+      "sub": "символи валют + formatAmount",
+      "path": "src/lib/currency.ts",
+      "col": "lib",
+      "y": 400,
+      "module": "m-cur"
+    },
+    {
+      "id": "lib-encrypted-adapter",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/encrypted-adapter.ts",
+      "sub": "Prisma adapter поверх SQLCipher",
+      "path": "src/lib/db/encrypted-adapter.ts",
+      "col": "lib",
+      "y": 480,
+      "module": "m-vault"
+    },
+    {
+      "id": "lib-migrator",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/migrator.ts",
+      "sub": "застосування міграцій на зашифрованій БД",
+      "path": "src/lib/db/migrator.ts",
+      "col": "lib",
+      "y": 720,
+      "module": "m-vault"
+    },
+    {
+      "id": "lib-hooks",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/hooks.ts",
+      "sub": "useCurrencyRates() · TTL 5хв",
+      "path": "src/lib/hooks.ts",
+      "col": "lib",
+      "y": 560,
+      "module": "m-cur"
+    },
+    {
+      "id": "lib-mcc",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/mcc.ts",
+      "sub": "MCC → категорія + getEffectiveCategory(overrides) · 15 категорій",
+      "path": "src/lib/mcc.ts",
+      "col": "lib",
+      "y": 640,
+      "module": "m-cat"
+    },
+    {
+      "id": "lib-monobank",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/monobank.ts",
+      "sub": "getClientInfo · getStatement · getCurrencyRates · setWebhook",
+      "path": "src/lib/monobank.ts",
+      "col": "lib",
+      "y": 800,
+      "module": "m-sync"
+    },
+    {
+      "id": "lib-passwords",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/passwords.ts",
+      "sub": "хешування + verify паролів",
+      "path": "src/lib/passwords.ts",
+      "col": "lib",
+      "y": 880,
+      "module": "m-auth"
+    },
+    {
+      "id": "lib-prisma",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/prisma.ts",
+      "sub": "Prisma Client (singleton)",
+      "path": "src/lib/prisma.ts",
+      "col": "lib",
+      "y": 960,
+      "module": "m-sync"
+    },
+    {
+      "id": "lib-usemonthcomparison",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/useMonthComparison.ts",
+      "sub": "порівняння витрат поточного vs минулого місяця",
+      "path": "src/lib/useMonthComparison.ts",
+      "col": "lib",
+      "y": 1120,
+      "module": "m-anal"
+    },
+    {
+      "id": "comp-accountcard",
+      "group": "comp",
+      "kind": "comp",
+      "name": "AccountCard",
+      "sub": "картка рахунка з балансом і типом",
+      "path": "src/components/AccountCard.tsx",
+      "col": "comp",
+      "y": 80,
+      "module": "m-net"
+    },
+    {
+      "id": "comp-accountfilter",
+      "group": "comp",
+      "kind": "comp",
+      "name": "AccountFilter",
+      "sub": "мульти-фільтр за рахунками",
+      "path": "src/components/AccountFilter.tsx",
+      "col": "comp",
+      "y": 160,
+      "module": "m-net"
+    },
+    {
+      "id": "comp-budgetalertbanner",
+      "group": "comp",
+      "kind": "comp",
+      "name": "BudgetAlertBanner",
+      "sub": "банер для перевищених/попереджувальних бюджетів",
+      "path": "src/components/BudgetAlertBanner.tsx",
+      "col": "comp",
+      "y": 240,
+      "module": "m-budg"
+    },
+    {
+      "id": "comp-budgetprogresscard",
+      "group": "comp",
+      "kind": "comp",
+      "name": "BudgetProgressCard",
+      "sub": "прогрес-бар бюджета по категорії",
+      "path": "src/components/BudgetProgressCard.tsx",
+      "col": "comp",
+      "y": 320,
+      "module": "m-budg"
+    },
+    {
+      "id": "comp-categorydropdown",
+      "group": "comp",
+      "kind": "comp",
+      "name": "CategoryDropdown",
+      "sub": "override категорії транзакції",
+      "path": "src/components/CategoryDropdown.tsx",
+      "col": "comp",
+      "y": 400,
+      "module": "m-cat"
+    },
+    {
+      "id": "comp-dailychart",
+      "group": "comp",
+      "kind": "comp",
+      "name": "DailyChart",
+      "sub": "гістограма витрат по днях",
+      "path": "src/components/DailyChart.tsx",
+      "col": "comp",
+      "y": 480,
+      "module": "m-anal"
+    },
+    {
+      "id": "comp-dataprovider",
+      "group": "comp",
+      "kind": "comp",
+      "name": "DataProvider",
+      "sub": "глобальний стан: token, client, statements, overrides, manual accounts; TTL кеш",
+      "path": "src/components/DataProvider.tsx",
+      "col": "comp",
+      "y": 560,
+      "module": "m-sync"
+    },
+    {
+      "id": "comp-monthcomparison",
+      "group": "comp",
+      "kind": "comp",
+      "name": "MonthComparison",
+      "sub": "поточний місяць vs попередній",
+      "path": "src/components/MonthComparison.tsx",
+      "col": "comp",
+      "y": 640,
+      "module": "m-anal"
+    },
+    {
+      "id": "comp-refreshbutton",
+      "group": "comp",
+      "kind": "comp",
+      "name": "RefreshButton",
+      "sub": "ручний тригер синхронізації · cooldown 5хв",
+      "path": "src/components/RefreshButton.tsx",
+      "col": "comp",
+      "y": 720,
+      "module": "m-sync"
+    },
+    {
+      "id": "comp-sidebar",
+      "group": "comp",
+      "kind": "comp",
+      "name": "Sidebar",
+      "sub": "лівий навігаційний сайдбар",
+      "path": "src/components/Sidebar.tsx",
+      "col": "comp",
+      "y": 800
+    },
+    {
+      "id": "comp-spendingchart",
+      "group": "comp",
+      "kind": "comp",
+      "name": "SpendingChart",
+      "sub": "pie chart витрат по категоріях",
+      "path": "src/components/SpendingChart.tsx",
+      "col": "comp",
+      "y": 880,
+      "module": "m-anal"
+    },
+    {
+      "id": "comp-themeprovider",
+      "group": "comp",
+      "kind": "comp",
+      "name": "ThemeProvider",
+      "sub": "dark / light mode",
+      "path": "src/components/ThemeProvider.tsx",
+      "col": "comp",
+      "y": 960
+    },
+    {
+      "id": "comp-toast",
+      "group": "comp",
+      "kind": "comp",
+      "name": "Toast",
+      "sub": "спливаючі повідомлення",
+      "path": "src/components/Toast.tsx",
+      "col": "comp",
+      "y": 1040
+    },
+    {
+      "id": "db-sqlite",
+      "group": "db",
+      "kind": "db",
+      "name": "SQLite (Prisma)",
+      "sub": "User · ManualAccount · ManualTransaction · CustomCategory · TransactionOverride · Transaction",
+      "path": "prisma/schema.prisma",
+      "col": "ext",
+      "y": 400
+    },
+    {
+      "id": "ext-mono",
+      "group": "ext",
+      "col": "ext",
+      "y": 280,
+      "name": "Monobank API",
+      "sub": "api.monobank.ua · X-Token auth",
+      "path": "https://api.monobank.ua",
+      "kind": "external"
+    },
+    {
+      "id": "ext-openai",
+      "group": "ext",
+      "col": "ext",
+      "y": 130,
+      "name": "OpenAI API",
+      "sub": "опційно · виклики з ключа User.openaiApiKey",
+      "path": "https://api.openai.com",
+      "kind": "external"
+    },
+    {
+      "id": "store-local",
+      "group": "store",
+      "col": "ext",
+      "y": 980,
+      "name": "localStorage",
+      "sub": "finfast_mono_token · finfast_user_id · finfast_budgets",
+      "path": "browser",
+      "kind": "external"
+    },
+    {
+      "id": "store-session",
+      "group": "store",
+      "col": "ext",
+      "y": 1080,
+      "name": "sessionStorage",
+      "sub": "кеш client (60s) · statements (5хв) · currency (5хв)",
+      "path": "browser",
+      "kind": "external"
+    }
+  ],
+  "edges": [
+    {
+      "from": "page-accounts",
+      "to": "api-manual-accounts"
+    },
+    {
+      "from": "page-net-worth",
+      "to": "api-manual-accounts"
+    },
+    {
+      "from": "page-net-worth",
+      "to": "api-manual-transactions"
+    },
+    {
+      "from": "page-settings",
+      "to": "api-auth-change-password"
+    },
+    {
+      "from": "page-settings",
+      "to": "api-settings-ai"
+    },
+    {
+      "from": "page-settings",
+      "to": "api-export"
+    },
+    {
+      "from": "page-settings",
+      "to": "api-import"
+    },
+    {
+      "from": "page-transactions-new",
+      "to": "api-manual-transactions"
+    },
+    {
+      "from": "comp-categorydropdown",
+      "to": "api-transactions-overrides"
+    },
+    {
+      "from": "comp-categorydropdown",
+      "to": "api-categories"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "api-auth-logout"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "api-auth-me"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "api-categories"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "api-transactions-overrides"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "api-manual-accounts"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "api-monobank-client-info"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "api-monobank-statement"
+    },
+    {
+      "from": "lib-hooks",
+      "to": "api-monobank-currency"
+    },
+    {
+      "from": "lib-usemonthcomparison",
+      "to": "api-transactions-backfill"
+    },
+    {
+      "from": "lib-usemonthcomparison",
+      "to": "api-transactions-history"
+    },
+    {
+      "from": "api-categories",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "api-export",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "api-import",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "api-manual-accounts",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "api-manual-transactions",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "api-monobank-client-info",
+      "to": "lib-monobank"
+    },
+    {
+      "from": "api-monobank-currency",
+      "to": "lib-monobank"
+    },
+    {
+      "from": "api-monobank-statement",
+      "to": "lib-monobank"
+    },
+    {
+      "from": "api-monobank-statement",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "api-monobank-webhook",
+      "to": "lib-monobank"
+    },
+    {
+      "from": "api-settings-ai",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "api-transactions-backfill",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "api-transactions-backfill",
+      "to": "lib-monobank"
+    },
+    {
+      "from": "api-transactions-history",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "api-transactions-overrides",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "comp-accountcard",
+      "to": "lib-currency"
+    },
+    {
+      "from": "comp-accountfilter",
+      "to": "lib-currency"
+    },
+    {
+      "from": "comp-accountfilter",
+      "to": "lib-accounts"
+    },
+    {
+      "from": "comp-budgetalertbanner",
+      "to": "lib-mcc"
+    },
+    {
+      "from": "comp-budgetalertbanner",
+      "to": "lib-currency"
+    },
+    {
+      "from": "comp-budgetprogresscard",
+      "to": "lib-mcc"
+    },
+    {
+      "from": "comp-budgetprogresscard",
+      "to": "lib-currency"
+    },
+    {
+      "from": "comp-categorydropdown",
+      "to": "lib-mcc"
+    },
+    {
+      "from": "comp-dailychart",
+      "to": "lib-currency"
+    },
+    {
+      "from": "comp-monthcomparison",
+      "to": "lib-currency"
+    },
+    {
+      "from": "comp-monthcomparison",
+      "to": "lib-usemonthcomparison"
+    },
+    {
+      "from": "comp-spendingchart",
+      "to": "lib-mcc"
+    },
+    {
+      "from": "comp-spendingchart",
+      "to": "lib-currency"
+    },
+    {
+      "from": "lib-bootstrap",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "lib-vault",
+      "to": "lib-prisma"
+    },
+    {
+      "from": "lib-budgets",
+      "to": "lib-mcc"
+    },
+    {
+      "from": "lib-usemonthcomparison",
+      "to": "lib-mcc"
+    },
+    {
+      "from": "page-accounts",
+      "to": "lib-currency"
+    },
+    {
+      "from": "page-analytics",
+      "to": "lib-mcc"
+    },
+    {
+      "from": "page-analytics",
+      "to": "lib-currency"
+    },
+    {
+      "from": "page-analytics",
+      "to": "lib-usemonthcomparison"
+    },
+    {
+      "from": "page-budgets",
+      "to": "lib-budgets"
+    },
+    {
+      "from": "page-budgets",
+      "to": "lib-mcc"
+    },
+    {
+      "from": "page-budgets",
+      "to": "lib-currency"
+    },
+    {
+      "from": "page-dashboard",
+      "to": "lib-budgets"
+    },
+    {
+      "from": "page-dashboard",
+      "to": "lib-hooks"
+    },
+    {
+      "from": "page-dashboard",
+      "to": "lib-currency"
+    },
+    {
+      "from": "page-dashboard",
+      "to": "lib-accounts"
+    },
+    {
+      "from": "page-net-worth",
+      "to": "lib-currency"
+    },
+    {
+      "from": "page-net-worth",
+      "to": "lib-hooks"
+    },
+    {
+      "from": "page-settings",
+      "to": "lib-passwords"
+    },
+    {
+      "from": "page-transactions-new",
+      "to": "lib-currency"
+    },
+    {
+      "from": "page-transactions-new",
+      "to": "lib-mcc"
+    },
+    {
+      "from": "page-transactions-new",
+      "to": "lib-hooks"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "page-accounts"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "page-analytics"
+    },
+    {
+      "from": "comp-spendingchart",
+      "to": "page-analytics"
+    },
+    {
+      "from": "comp-dailychart",
+      "to": "page-analytics"
+    },
+    {
+      "from": "comp-accountfilter",
+      "to": "page-analytics"
+    },
+    {
+      "from": "comp-refreshbutton",
+      "to": "page-analytics"
+    },
+    {
+      "from": "comp-monthcomparison",
+      "to": "page-analytics"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "page-budgets"
+    },
+    {
+      "from": "comp-budgetprogresscard",
+      "to": "page-budgets"
+    },
+    {
+      "from": "comp-accountfilter",
+      "to": "page-budgets"
+    },
+    {
+      "from": "comp-refreshbutton",
+      "to": "page-budgets"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "page-dashboard"
+    },
+    {
+      "from": "comp-accountcard",
+      "to": "page-dashboard"
+    },
+    {
+      "from": "comp-budgetalertbanner",
+      "to": "page-dashboard"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "page-net-worth"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "page-settings"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "page-transactions-new"
+    },
+    {
+      "from": "comp-refreshbutton",
+      "to": "page-transactions-new"
+    },
+    {
+      "from": "comp-categorydropdown",
+      "to": "page-transactions-new"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "comp-categorydropdown"
+    },
+    {
+      "from": "comp-themeprovider",
+      "to": "comp-dailychart"
+    },
+    {
+      "from": "comp-themeprovider",
+      "to": "comp-sidebar"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "comp-sidebar"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "comp-spendingchart"
+    },
+    {
+      "from": "comp-themeprovider",
+      "to": "comp-spendingchart"
+    },
+    {
+      "from": "lib-prisma",
+      "to": "db-sqlite"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "store-local"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "store-session"
+    },
+    {
+      "from": "lib-budgets",
+      "to": "store-local"
+    },
+    {
+      "from": "lib-hooks",
+      "to": "store-session"
+    },
+    {
+      "from": "api-settings-ai",
+      "to": "ext-openai"
+    },
+    {
+      "from": "lib-monobank",
+      "to": "ext-mono"
+    }
+  ],
+  "modules": [
+    {
+      "id": "m-auth",
+      "name": "Auth & Onboarding",
+      "icon": "⚿",
+      "color": "#4ade80",
+      "col": 0,
+      "row": 0,
+      "sub": "Setup · login · session · Monobank token",
+      "foot": "Точка входу",
+      "description": "Точка входу і ідентифікації користувача: на /setup він уперше створює майстер-пароль (це створює зашифрований vault), потім на /login вводить пароль щоб розшифрувати БД для поточної сесії, і вже в Settings прив'язує свій Monobank токен. Усі інші модулі залежать від цього: без активної сесії БД зашифрована і недоступна, а без Monobank токена нема що синхронізувати.",
+      "items": [
+        {
+          "tag": "PAGE",
+          "text": "Home (redirect)  /"
+        },
+        {
+          "tag": "PAGE",
+          "text": "Login  /login"
+        },
+        {
+          "tag": "PAGE",
+          "text": "Settings  /settings"
+        },
+        {
+          "tag": "PAGE",
+          "text": "Setup  /setup"
+        },
+        {
+          "tag": "API",
+          "text": "/api/auth/me"
+        },
+        {
+          "tag": "API",
+          "text": "/api/auth/status"
+        },
+        {
+          "tag": "API",
+          "text": "/api/auth/change-password"
+        },
+        {
+          "tag": "API",
+          "text": "/api/auth/login"
+        },
+        {
+          "tag": "API",
+          "text": "/api/auth/logout"
+        },
+        {
+          "tag": "API",
+          "text": "/api/auth/recover"
+        },
+        {
+          "tag": "API",
+          "text": "/api/auth/setup"
+        },
+        {
+          "tag": "API",
+          "text": "/api/user"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/bootstrap.ts"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/passwords.ts"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/session.ts"
+        }
+      ]
+    },
+    {
+      "id": "m-sync",
+      "name": "Bank Sync",
+      "icon": "⇅",
+      "color": "#fbbf24",
+      "col": 1,
+      "row": 0,
+      "sub": "Інтеграція з Monobank + Prisma persistence",
+      "foot": "Постачальник транзакцій",
+      "description": "Серце аппки: тягне з Monobank інформацію про рахунки, виписки за період та real-time webhook-и, і фоном зберігає все у SQLite через Prisma. Користувач натискає Refresh або відкриває Dashboard — і свіжі транзакції одразу з'являються всюди. Це постачальник даних, від якого живуть Categorization, Budgets, Analytics і Net Worth.",
+      "items": [
+        {
+          "tag": "API",
+          "text": "/api/monobank/client-info"
+        },
+        {
+          "tag": "API",
+          "text": "/api/monobank/statement"
+        },
+        {
+          "tag": "API",
+          "text": "/api/transactions/history"
+        },
+        {
+          "tag": "API",
+          "text": "/api/monobank/webhook"
+        },
+        {
+          "tag": "API",
+          "text": "/api/transactions/backfill"
+        },
+        {
+          "tag": "COMP",
+          "text": "DataProvider"
+        },
+        {
+          "tag": "COMP",
+          "text": "RefreshButton"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/monobank.ts"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/prisma.ts"
+        }
+      ]
+    },
+    {
+      "id": "m-ai",
+      "name": "AI Assistant",
+      "icon": "✦",
+      "color": "#a78bfa",
+      "col": 2,
+      "row": 0,
+      "sub": "Готовність до автоклассифікації",
+      "foot": "Опційно",
+      "description": "Інфраструктурний модуль: дозволяє користувачу зберегти власний OpenAI API ключ у своєму профілі, який пізніше використовуватиметься для автоматичного присвоєння категорій незрозумілим транзакціям. Зараз — опційний і не задіяний активно, але вже готовий розширити Categorization без зміни архітектури.",
+      "items": [
+        {
+          "tag": "API",
+          "text": "/api/settings/ai"
+        }
+      ]
+    },
+    {
+      "id": "m-cat",
+      "name": "Categorization",
+      "icon": "#",
+      "color": "#f472b6",
+      "col": 0,
+      "row": 1,
+      "sub": "MCC + custom + overrides",
+      "foot": "Чим є кожна транзакція",
+      "description": "Перетворює сирі банківські транзакції на щось зрозуміле: автоматично присвоює одну з 15 категорій за MCC-кодом, а коли користувач не згоден — створює власну категорію та override для конкретної транзакції. Це фундамент для Budgets (ліміти по категоріях) і Analytics (графіки витрат); без коректних категорій ці модулі мають мало сенсу.",
+      "items": [
+        {
+          "tag": "PAGE",
+          "text": "Transactions  /transactions-new"
+        },
+        {
+          "tag": "API",
+          "text": "/api/categories"
+        },
+        {
+          "tag": "API",
+          "text": "/api/transactions/overrides"
+        },
+        {
+          "tag": "COMP",
+          "text": "CategoryDropdown"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/mcc.ts"
+        }
+      ]
+    },
+    {
+      "id": "m-budg",
+      "name": "Budgets",
+      "icon": "◐",
+      "color": "#60a5fa",
+      "col": 1,
+      "row": 1,
+      "sub": "Ліміти · алерти · прогрес",
+      "foot": "Контроль витрат",
+      "description": "Дозволяє користувачу встановити місячні ліміти витрат по категоріях і отримувати попередження, коли він наближається або перевищує їх. Прогрес-картки показують стан кожного бюджета, а банер на Dashboard видає швидкий сигнал тривоги. Це інструмент самодисципліни — перетворює пасивний перегляд транзакцій на активне планування.",
+      "items": [
+        {
+          "tag": "PAGE",
+          "text": "Budgets  /budgets"
+        },
+        {
+          "tag": "COMP",
+          "text": "BudgetAlertBanner"
+        },
+        {
+          "tag": "COMP",
+          "text": "BudgetProgressCard"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/budgets.ts"
+        }
+      ]
+    },
+    {
+      "id": "m-anal",
+      "name": "Analytics",
+      "icon": "≋",
+      "color": "#38bdf8",
+      "col": 2,
+      "row": 1,
+      "sub": "Графіки витрат · порівняння",
+      "foot": "Розуміння поведінки",
+      "description": "Візуалізує фінансову поведінку: щоденна гістограма витрат, pie chart за категоріями, порівняння поточного місяця з минулим. Користувач приходить сюди щоб зрозуміти куди йдуть гроші і виявити тенденції — модуль не змінює даних, тільки агрегує. Це двигун сценаріїв \"щоденна перевірка\" і \"місячне планування\".",
+      "items": [
+        {
+          "tag": "PAGE",
+          "text": "Analytics  /analytics"
+        },
+        {
+          "tag": "PAGE",
+          "text": "Dashboard  /dashboard"
+        },
+        {
+          "tag": "COMP",
+          "text": "DailyChart"
+        },
+        {
+          "tag": "COMP",
+          "text": "MonthComparison"
+        },
+        {
+          "tag": "COMP",
+          "text": "SpendingChart"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/useMonthComparison.ts"
+        }
+      ]
+    },
+    {
+      "id": "m-net",
+      "name": "Net Worth & Accounts",
+      "icon": "$",
+      "color": "#c084fc",
+      "col": 0,
+      "row": 2,
+      "sub": "Активи − пасиви, ручний облік",
+      "foot": "Повна фінансова картина",
+      "description": "Дозволяє додати поза-Monobank рахунки — депозити, кредити, готівку, інвестиції — як ручні asset/liability записи з власними транзакціями, і показує загальний чистий капітал (активи мінус пасиви). Робить аппку повноцінним фінансовим менеджером замість простого переглядача Monobank-виписки.",
+      "items": [
+        {
+          "tag": "PAGE",
+          "text": "Accounts  /accounts"
+        },
+        {
+          "tag": "PAGE",
+          "text": "Net Worth  /net-worth"
+        },
+        {
+          "tag": "API",
+          "text": "/api/manual-accounts"
+        },
+        {
+          "tag": "API",
+          "text": "/api/manual-transactions"
+        },
+        {
+          "tag": "COMP",
+          "text": "AccountCard"
+        },
+        {
+          "tag": "COMP",
+          "text": "AccountFilter"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/accounts.ts"
+        }
+      ]
+    },
+    {
+      "id": "m-cur",
+      "name": "Currency & FX",
+      "icon": "₴",
+      "color": "#fb923c",
+      "col": 1,
+      "row": 2,
+      "sub": "Мульти-валюта + кеш курсів",
+      "foot": "Конверсії та формат",
+      "description": "Обслуговує мульти-валютність: тягне курси з Monobank `/bank/currency` з кешем 5 хв, форматує суми з правильним символом валюти, конвертує значення для Net Worth і Analytics. Більшість користувачів про нього не думають — він мовчазно працює коли в когось є рахунки в EUR/USD або інвестиції в іноземних активах.",
+      "items": [
+        {
+          "tag": "API",
+          "text": "/api/monobank/currency"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/currency.ts"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/hooks.ts"
+        }
+      ]
+    },
+    {
+      "id": "m-io",
+      "name": "Data I/O",
+      "icon": "⇄",
+      "color": "#f87171",
+      "col": 2,
+      "row": 2,
+      "sub": "Експорт / Імпорт",
+      "foot": "Резерв і перенос",
+      "description": "Експорт і імпорт транзакцій у CSV/JSON: для бекапу, переїзду на нову інсталяцію або зовнішнього аналізу в Excel. Це модуль \"виходу з замкненої системи\" — гарантія, що дані користувача не залежать від цієї конкретної аппки і завжди залишаються його власністю.",
+      "items": [
+        {
+          "tag": "API",
+          "text": "/api/export"
+        },
+        {
+          "tag": "API",
+          "text": "/api/import"
+        }
+      ]
+    },
+    {
+      "id": "m-vault",
+      "name": "Vault & Encryption",
+      "icon": "⌬",
+      "color": "#14b8a6",
+      "col": 1,
+      "row": 3,
+      "sub": "SQLCipher whole-DB encryption",
+      "foot": "Захист даних користувача",
+      "description": "Реалізує password-derived шифрування цілої БД (SQLCipher): пароль користувача через KDF перетворюється на ключ, який тримається у пам'яті процесу тільки на час сесії, і саме ним розшифровується кожен запит Prisma через спеціальний адаптер. Жоден байт фінансових даних не лежить на диску у відкритому вигляді — без правильного пароля БД виглядає як шум, тому втрата пароля = втрата даних.",
+      "items": [
+        {
+          "tag": "LIB",
+          "text": "lib/crypto.ts"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/encrypted-adapter.ts"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/migrator.ts"
+        },
+        {
+          "tag": "LIB",
+          "text": "lib/vault.ts"
+        }
+      ]
+    }
+  ],
+  "moduleEdges": [
+    {
+      "from": "m-auth",
+      "to": "m-vault",
+      "label": "password → key"
+    },
+    {
+      "from": "m-vault",
+      "to": "m-sync",
+      "label": "розшифрована БД"
+    },
+    {
+      "from": "m-auth",
+      "to": "m-sync",
+      "label": "token"
+    },
+    {
+      "from": "m-auth",
+      "to": "m-ai",
+      "label": "userId"
+    },
+    {
+      "from": "m-sync",
+      "to": "m-cat",
+      "label": "транзакції"
+    },
+    {
+      "from": "m-sync",
+      "to": "m-anal",
+      "label": "транзакції"
+    },
+    {
+      "from": "m-sync",
+      "to": "m-budg",
+      "label": "транзакції"
+    },
+    {
+      "from": "m-sync",
+      "to": "m-net",
+      "label": "баланси"
+    },
+    {
+      "from": "m-cat",
+      "to": "m-budg",
+      "label": "категорія → ліміт"
+    },
+    {
+      "from": "m-cat",
+      "to": "m-anal",
+      "label": "категорія → графік"
+    },
+    {
+      "from": "m-cur",
+      "to": "m-anal",
+      "label": "курси"
+    },
+    {
+      "from": "m-cur",
+      "to": "m-net",
+      "label": "конверсія"
+    },
+    {
+      "from": "m-cur",
+      "to": "m-sync",
+      "label": "коди валют"
+    },
+    {
+      "from": "m-ai",
+      "to": "m-cat",
+      "label": "автоклас (план)"
+    },
+    {
+      "from": "m-io",
+      "to": "m-sync",
+      "label": "імпорт"
+    },
+    {
+      "from": "m-anal",
+      "to": "m-io",
+      "label": "експорт"
+    },
+    {
+      "from": "m-net",
+      "to": "m-anal",
+      "label": "чистий капітал"
+    }
+  ],
+  "flows": {
+    "auth": {
+      "name": "Auth · вхід з токеном",
+      "color": "#4ade80",
+      "desc": "Користувач вводить Monobank токен у Settings → upsert User → userId зберігається у localStorage → DataProvider підхоплює.",
+      "steps": [
+        {
+          "from": "page-settings",
+          "to": "comp-dataprovider",
+          "label": "token"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "api-user",
+          "label": "POST /api/user"
+        },
+        {
+          "from": "api-user",
+          "to": "lib-prisma",
+          "label": "User.upsert"
+        },
+        {
+          "from": "lib-prisma",
+          "to": "db-sqlite",
+          "label": "INSERT/UPDATE"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "store-local",
+          "label": "finfast_user_id"
+        },
+        {
+          "from": "page-settings",
+          "to": "comp-dataprovider",
+          "label": "редирект → /dashboard"
+        }
+      ]
+    },
+    "clientInfo": {
+      "name": "Boot · завантаження client-info",
+      "color": "#60a5fa",
+      "desc": "DataProvider при монтуванні тягне акаунти й банки з Monobank, кешує в sessionStorage.",
+      "steps": [
+        {
+          "from": "page-dashboard",
+          "to": "comp-dataprovider",
+          "label": "useData()"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "api-monobank-client-info",
+          "label": "GET /api/monobank/client-info"
+        },
+        {
+          "from": "api-monobank-client-info",
+          "to": "lib-monobank",
+          "label": "getClientInfo(token)"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "ext-mono",
+          "label": "/personal/client-info"
+        },
+        {
+          "from": "ext-mono",
+          "to": "lib-monobank",
+          "label": "accounts[], jars[]"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "api-monobank-client-info",
+          "label": "json"
+        },
+        {
+          "from": "api-monobank-client-info",
+          "to": "comp-dataprovider",
+          "label": "client"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "store-session",
+          "label": "кеш TTL 60s"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "page-dashboard",
+          "label": "render"
+        }
+      ]
+    },
+    "sync": {
+      "name": "Sync · ручне оновлення транзакцій",
+      "color": "#fbbf24",
+      "desc": "RefreshButton → fetchStatements: для кожного рахунка виписка з Monobank, upsert у БД, кеш, UI.",
+      "steps": [
+        {
+          "from": "comp-refreshbutton",
+          "to": "comp-dataprovider",
+          "label": "refresh()"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "api-monobank-statement",
+          "label": "GET /api/monobank/statement"
+        },
+        {
+          "from": "api-monobank-statement",
+          "to": "lib-monobank",
+          "label": "getStatement()"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "ext-mono",
+          "label": "/personal/statement/{id}/{from}/{to}"
+        },
+        {
+          "from": "ext-mono",
+          "to": "lib-monobank",
+          "label": "transactions[]"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "api-monobank-statement",
+          "label": "json"
+        },
+        {
+          "from": "api-monobank-statement",
+          "to": "lib-prisma",
+          "label": "Transaction.upsert (фон)"
+        },
+        {
+          "from": "lib-prisma",
+          "to": "db-sqlite",
+          "label": "INSERT/UPDATE"
+        },
+        {
+          "from": "api-monobank-statement",
+          "to": "comp-dataprovider",
+          "label": "statements"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "store-session",
+          "label": "кеш TTL 5хв"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "page-transactions-new",
+          "label": "render"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "page-dashboard",
+          "label": "render"
+        }
+      ]
+    },
+    "override": {
+      "name": "Override · змінити категорію транзакції",
+      "color": "#c084fc",
+      "desc": "Користувач у списку транзакцій змінює категорію → upsert TransactionOverride → перерахунок ефективної категорії.",
+      "steps": [
+        {
+          "from": "page-transactions-new",
+          "to": "comp-categorydropdown",
+          "label": "клік по категорії"
+        },
+        {
+          "from": "comp-categorydropdown",
+          "to": "comp-dataprovider",
+          "label": "setOverride()"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "api-transactions-overrides",
+          "label": "PUT /api/transactions/overrides"
+        },
+        {
+          "from": "api-transactions-overrides",
+          "to": "lib-prisma",
+          "label": "upsert"
+        },
+        {
+          "from": "lib-prisma",
+          "to": "db-sqlite",
+          "label": "INSERT/UPDATE"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "api-transactions-overrides",
+          "label": "GET refresh"
+        },
+        {
+          "from": "api-transactions-overrides",
+          "to": "comp-dataprovider",
+          "label": "overrides{}"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "lib-mcc",
+          "label": "getEffectiveCategory()"
+        },
+        {
+          "from": "lib-mcc",
+          "to": "page-transactions-new",
+          "label": "re-render"
+        }
+      ]
+    },
+    "budgets": {
+      "name": "Budgets · ліміти та алерти",
+      "color": "#f472b6",
+      "desc": "Бюджети живуть у localStorage. Транзакції фільтруються по місяцю → стан ok/warning/exceeded → банер та прогрес-картки.",
+      "steps": [
+        {
+          "from": "page-budgets",
+          "to": "lib-budgets",
+          "label": "useBudgets()"
+        },
+        {
+          "from": "lib-budgets",
+          "to": "store-local",
+          "label": "finfast_budgets"
+        },
+        {
+          "from": "store-local",
+          "to": "lib-budgets",
+          "label": "limits{}"
+        },
+        {
+          "from": "comp-dataprovider",
+          "to": "lib-budgets",
+          "label": "statements + overrides"
+        },
+        {
+          "from": "lib-budgets",
+          "to": "comp-budgetprogresscard",
+          "label": "BudgetStatus[]"
+        },
+        {
+          "from": "comp-budgetprogresscard",
+          "to": "page-budgets",
+          "label": "render"
+        },
+        {
+          "from": "comp-budgetalertbanner",
+          "to": "page-dashboard",
+          "label": "AlertBanner"
+        }
+      ]
+    },
+    "backfill": {
+      "name": "Backfill · підвантажити попередній місяць",
+      "color": "#fb923c",
+      "desc": "Settings → backfill: для кожного account-id тягнемо statement за минулий місяць і записуємо в БД.",
+      "steps": [
+        {
+          "from": "page-settings",
+          "to": "api-transactions-backfill",
+          "label": "POST /api/transactions/backfill"
+        },
+        {
+          "from": "api-transactions-backfill",
+          "to": "lib-monobank",
+          "label": "getStatement() ×N"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "ext-mono",
+          "label": "/personal/statement (минулий місяць)"
+        },
+        {
+          "from": "ext-mono",
+          "to": "lib-monobank",
+          "label": "transactions[]"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "api-transactions-backfill",
+          "label": "json"
+        },
+        {
+          "from": "api-transactions-backfill",
+          "to": "lib-prisma",
+          "label": "Transaction.upsert ×N"
+        },
+        {
+          "from": "lib-prisma",
+          "to": "db-sqlite",
+          "label": "bulk INSERT"
+        },
+        {
+          "from": "api-transactions-backfill",
+          "to": "page-settings",
+          "label": "persisted: N"
+        }
+      ]
+    },
+    "rates": {
+      "name": "Currency · курси валют (з кешем)",
+      "color": "#38bdf8",
+      "desc": "useCurrencyRates → серверна обгортка з server-side cache → Monobank /bank/currency.",
+      "steps": [
+        {
+          "from": "page-dashboard",
+          "to": "lib-hooks",
+          "label": "useCurrencyRates()"
+        },
+        {
+          "from": "lib-hooks",
+          "to": "api-monobank-currency",
+          "label": "GET /api/monobank/currency"
+        },
+        {
+          "from": "api-monobank-currency",
+          "to": "lib-monobank",
+          "label": "getCurrencyRates()"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "ext-mono",
+          "label": "/bank/currency"
+        },
+        {
+          "from": "ext-mono",
+          "to": "lib-monobank",
+          "label": "rates[]"
+        },
+        {
+          "from": "lib-monobank",
+          "to": "api-monobank-currency",
+          "label": "json (cache)"
+        },
+        {
+          "from": "api-monobank-currency",
+          "to": "lib-hooks",
+          "label": "rates"
+        },
+        {
+          "from": "lib-hooks",
+          "to": "page-dashboard",
+          "label": "render"
+        }
+      ]
+    },
+    "ai": {
+      "name": "AI key · збереження OpenAI ключа",
+      "color": "#a78bfa",
+      "desc": "Користувач у Settings вводить OpenAI API ключ → upsert у БД (per user).",
+      "steps": [
+        {
+          "from": "page-settings",
+          "to": "api-settings-ai",
+          "label": "PUT /api/settings/ai"
+        },
+        {
+          "from": "api-settings-ai",
+          "to": "lib-prisma",
+          "label": "User.openaiApiKey = …"
+        },
+        {
+          "from": "lib-prisma",
+          "to": "db-sqlite",
+          "label": "UPDATE User"
+        },
+        {
+          "from": "api-settings-ai",
+          "to": "ext-openai",
+          "label": "(майбутній виклик)"
+        }
+      ]
+    }
+  },
+  "journeys": {
+    "newUser": {
+      "name": "Новий користувач",
+      "color": "#4ade80",
+      "desc": "Перший запуск: вводить токен і одразу бачить свої гроші.",
+      "steps": [
+        {
+          "module": "m-auth",
+          "label": "вводить Monobank токен"
+        },
+        {
+          "module": "m-sync",
+          "label": "автозавантаження client-info"
+        },
+        {
+          "module": "m-cur",
+          "label": "підвантаження курсів"
+        },
+        {
+          "module": "m-anal",
+          "label": "перший огляд Dashboard"
+        }
+      ]
+    },
+    "dailyCheck": {
+      "name": "Щоденна перевірка",
+      "color": "#fbbf24",
+      "desc": "Refresh → свіжі транзакції → перевірка бюджетів і графіків.",
+      "steps": [
+        {
+          "module": "m-sync",
+          "label": "RefreshButton → нові транзакції"
+        },
+        {
+          "module": "m-cat",
+          "label": "MCC → категорія"
+        },
+        {
+          "module": "m-budg",
+          "label": "перерахунок витрат · алерти"
+        },
+        {
+          "module": "m-anal",
+          "label": "оновлення графіків"
+        }
+      ]
+    },
+    "reclassify": {
+      "name": "Перекатегоризація",
+      "color": "#f472b6",
+      "desc": "Помилкова MCC категорія → користувач створив свою і виправив.",
+      "steps": [
+        {
+          "module": "m-anal",
+          "label": "побачив дивний витрат"
+        },
+        {
+          "module": "m-cat",
+          "label": "створив custom + override"
+        },
+        {
+          "module": "m-budg",
+          "label": "бюджет перерахувався"
+        },
+        {
+          "module": "m-anal",
+          "label": "графік виправився"
+        }
+      ]
+    },
+    "monthlyPlan": {
+      "name": "Місячне планування",
+      "color": "#60a5fa",
+      "desc": "Кінець місяця: порівняння і оновлення лімітів на наступний.",
+      "steps": [
+        {
+          "module": "m-anal",
+          "label": "Month Comparison"
+        },
+        {
+          "module": "m-budg",
+          "label": "коригує ліміти"
+        },
+        {
+          "module": "m-cat",
+          "label": "уточнює категорії"
+        }
+      ]
+    },
+    "netWorth": {
+      "name": "Облік активів і кредитів",
+      "color": "#c084fc",
+      "desc": "Додає депозит і кредит вручну, бачить чистий капітал з конверсією валют.",
+      "steps": [
+        {
+          "module": "m-net",
+          "label": "додає manual account"
+        },
+        {
+          "module": "m-cur",
+          "label": "конверсія у базову валюту"
+        },
+        {
+          "module": "m-anal",
+          "label": "Net Worth"
+        }
+      ]
+    },
+    "backup": {
+      "name": "Backup і відновлення",
+      "color": "#f87171",
+      "desc": "Експортує транзакції; імпортує у нову інсталяцію.",
+      "steps": [
+        {
+          "module": "m-anal",
+          "label": "вибирає період"
+        },
+        {
+          "module": "m-io",
+          "label": "експорт JSON/CSV"
+        },
+        {
+          "module": "m-sync",
+          "label": "імпорт у нову інсталяцію"
+        }
+      ]
+    },
+    "setupAI": {
+      "name": "Підключення AI",
+      "color": "#a78bfa",
+      "desc": "Зберігає OpenAI ключ для майбутньої автоклассифікації.",
+      "steps": [
+        {
+          "module": "m-auth",
+          "label": "в Settings"
+        },
+        {
+          "module": "m-ai",
+          "label": "зберігає API ключ"
+        },
+        {
+          "module": "m-cat",
+          "label": "(майбутнє) автоклассифікація"
+        }
+      ]
+    }
+  }
+}
+</script>
+
+<script>
+/* =========================================================
+   1. Дані: завантажуємо з inline JSON (генерує arch-gen)
+   ========================================================= */
+
+const ARCH = (() => {
+  const el = document.getElementById("arch-data");
+  if (!el || !el.textContent.trim() || el.textContent.trim() === "{}") {
+    return null;
+  }
+  try { return JSON.parse(el.textContent); }
+  catch (e) {
+    console.error("[arch] не вдалося розпарсити arch-data:", e);
+    return null;
+  }
+})();
+
+if (!ARCH) {
+  document.body.innerHTML = `
+    <div style="max-width:680px;margin:80px auto;padding:32px;background:rgba(255,255,255,0.04);
+                border:1px solid rgba(248,113,113,0.4);border-radius:14px;color:#e4ecff;
+                font-family:ui-sans-serif,system-ui,sans-serif;line-height:1.6">
+      <h2 style="margin:0 0 12px;color:#f87171">Архітектурні дані не згенеровано</h2>
+      <p>Цей файл працює з автоматично побудованою мапою. Запусти один раз:</p>
+      <pre style="background:#0b1029;padding:12px 14px;border-radius:8px;color:#a5b4fc;
+                  font-family:ui-monospace,Menlo,monospace;font-size:13px">node scripts/generate-architecture.js</pre>
+      <p style="color:#8da0c8;font-size:13px">Він просканує <code>src/</code> та <code>prisma/</code>,
+        зіллє з <code>architecture.config.json</code>, і впише результат у цей HTML.
+        Потім <code>npm run dev</code>/<code>npm run build</code> робитимуть це автоматично.</p>
+    </div>`;
+  throw new Error("arch-data missing");
+}
+
+const COLS         = ARCH.cols        || {};
+const NODES        = ARCH.nodes       || [];
+const EDGES        = ARCH.edges       || [];
+const FLOWS        = ARCH.flows       || {};
+const MODULES      = ARCH.modules     || [];
+const MODULE_EDGES = ARCH.moduleEdges || [];
+const JOURNEYS     = ARCH.journeys    || {};
+
+// Покажемо timestamp генерації внизу
+if (ARCH.generatedAt) {
+  const d = new Date(ARCH.generatedAt);
+  const pad = n => String(n).padStart(2, "0");
+  const stamp = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const el = document.getElementById("genStamp");
+  if (el) el.textContent = `· синхронізовано ${stamp} (${NODES.length} вузлів, ${EDGES.length} ребер)`;
+}
+
+
+/* =========================================================
+   2. Рендер вузлів і ребер (arch view)
+   ========================================================= */
+
+const canvas      = document.getElementById("canvas");
+const viewArch    = document.getElementById("viewArch");
+const viewModules = document.getElementById("viewModules");
+const svg         = document.getElementById("edges");
+const svgM        = document.getElementById("edgesM");
+const flowsBox    = document.getElementById("flows");
+const ctrlLabel   = document.getElementById("ctrlLabel");
+const legendBox   = document.getElementById("legend");
+const tooltip     = document.getElementById("tooltip");
+const statusBox   = document.getElementById("status");
+const statusTxt   = document.getElementById("statusText");
+const viewToggle  = document.getElementById("viewToggle");
+
+const NODE_BY_ID = Object.create(null);
+
+// легенда
+const LEGEND = [
+  { k:"ui",    label:"UI page"      },
+  { k:"comp",  label:"Component"    },
+  { k:"state", label:"State/Hook"   },
+  { k:"api",   label:"API route"    },
+  { k:"lib",   label:"Lib / ORM"    },
+  { k:"db",    label:"Database"     },
+  { k:"ext",   label:"External API" },
+  { k:"store", label:"Browser store"},
+];
+for (const it of LEGEND) {
+  const c = getComputedStyle(document.documentElement).getPropertyValue("--c-" + it.k).trim();
+  const el = document.createElement("div");
+  el.className = "item";
+  el.innerHTML = `<span class="dot" style="background:${c}; color:${c}"></span>${it.label}`;
+  legendBox.appendChild(el);
+}
+
+// мітки колонок
+for (const [key, col] of Object.entries(COLS)) {
+  const lbl = document.createElement("div");
+  lbl.className = "col-label";
+  lbl.textContent = col.label;
+  lbl.style.left = `calc(${col.x}% - 60px)`;
+  viewArch.appendChild(lbl);
+}
+
+// малюємо вузли
+function layoutAndRender() {
+  const rect = canvas.getBoundingClientRect();
+  const w = rect.width;
+  const h = rect.height;
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+
+  viewArch.querySelectorAll(".node").forEach(n => n.remove());
+
+  for (const n of NODES) {
+    const el = document.createElement("div");
+    el.className = "node";
+    el.dataset.id = n.id;
+    el.dataset.group = n.group;
+    el.style.left = `calc(${COLS[n.col].x}% - 105px)`;
+    el.style.top  = `${n.y}px`;
+    el.style.width = "210px";
+    el.innerHTML = `
+      <div class="row"><span class="badge" style="background: var(--c); color: var(--c)"></span><span class="name">${escapeHtml(n.name)}</span></div>
+      <div class="sub">${escapeHtml(n.sub || "")}</div>
+    `;
+    el.addEventListener("mouseenter", (e) => showTooltip(n, e));
+    el.addEventListener("mousemove", moveTooltip);
+    el.addEventListener("mouseleave", hideTooltip);
+    viewArch.appendChild(el);
+    NODE_BY_ID[n.id] = { def:n, el };
+  }
+
+  for (const id in NODE_BY_ID) {
+    const { el } = NODE_BY_ID[id];
+    const r = el.getBoundingClientRect();
+    const cr = canvas.getBoundingClientRect();
+    NODE_BY_ID[id].cx = r.left + r.width / 2 - cr.left;
+    NODE_BY_ID[id].cy = r.top  + r.height / 2 - cr.top;
+    NODE_BY_ID[id].rx = r.width / 2;
+    NODE_BY_ID[id].ry = r.height / 2;
+  }
+
+  svg.innerHTML = "";
+  const defs = doc("defs");
+  defs.innerHTML = `
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="b" />
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  `;
+  svg.appendChild(defs);
+
+  for (const e of EDGES) {
+    const a = NODE_BY_ID[e.from];
+    const b = NODE_BY_ID[e.to];
+    if (!a || !b) continue;
+    const d = bezier(a, b);
+    const path = doc("path");
+    path.setAttribute("d", d);
+    path.setAttribute("class", "edge");
+    path.dataset.from = e.from;
+    path.dataset.to = e.to;
+    svg.appendChild(path);
+    e._path = path;
+    e._len = path.getTotalLength();
+  }
+}
+
+function bezier(a, b) {
+  const x1 = a.cx, y1 = a.cy;
+  const x2 = b.cx, y2 = b.cy;
+  const dx = x2 - x1;
+  const c1x = x1 + dx * 0.55;
+  const c2x = x2 - dx * 0.55;
+  return `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`;
+}
+
+function doc(tag) { return document.createElementNS("http://www.w3.org/2000/svg", tag); }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+
+/* =========================================================
+   3. Tooltip
+   ========================================================= */
+function showTooltip(n, e) {
+  const groupLabel = {
+    ui:"UI page", comp:"Component", state:"State / Hook",
+    api:"API route", lib:"Library", db:"Database",
+    ext:"External API", store:"Browser storage"
+  }[n.group] || n.group;
+  // якщо вузол належить модулю — додаємо секцію з назвою і описом модуля
+  let modBlock = "";
+  if (n.module) {
+    const mod = MODULES.find(m => m.id === n.module);
+    if (mod) {
+      modBlock = `
+        <div class="tt-mod">
+          <div class="mod-head">
+            <span class="mod-dot" style="background:${mod.color};color:${mod.color}"></span>
+            <span class="mod-tag">належить модулю</span>
+            <span>${escapeHtml(mod.name)}</span>
+          </div>
+          ${mod.description ? `<div class="mod-desc">${escapeHtml(mod.description)}</div>` : ""}
+        </div>`;
+    }
+  }
+  tooltip.innerHTML = `
+    <div class="tt-kind">${groupLabel}</div>
+    <div class="tt-title">${escapeHtml(n.name)}</div>
+    <div>${escapeHtml(n.sub || "")}</div>
+    ${n.description ? `<div class="tt-desc">${escapeHtml(n.description)}</div>` : ""}
+    ${modBlock}
+    <div class="tt-path">${escapeHtml(n.path || "")}</div>
+  `;
+  tooltip.classList.add("show");
+  moveTooltip(e);
+}
+function moveTooltip(e) {
+  const pad = 14;
+  let x = e.clientX + pad;
+  let y = e.clientY + pad;
+  const r = tooltip.getBoundingClientRect();
+  if (x + r.width  > window.innerWidth - 8)  x = e.clientX - r.width - pad;
+  if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - pad;
+  tooltip.style.left = x + "px";
+  tooltip.style.top  = y + "px";
+}
+function hideTooltip() { tooltip.classList.remove("show"); }
+
+/* =========================================================
+   4. Кнопки потоків та запуск анімації
+   ========================================================= */
+
+/* ====== Створюємо групи кнопок ====== */
+const flowKeys = Object.keys(FLOWS);
+const flowButtons = {};
+const archGroup = document.createElement("span");
+archGroup.className = "btn-group";
+flowsBox.appendChild(archGroup);
+for (const k of flowKeys) {
+  const f = FLOWS[k];
+  const btn = document.createElement("button");
+  btn.className = "flow-btn";
+  btn.textContent = f.name;
+  btn.style.borderColor = hexA(f.color, 0.5);
+  btn.style.color = "#fff";
+  btn.addEventListener("click", () => { stopShowAll(); runFlow(k); });
+  archGroup.appendChild(btn);
+  flowButtons[k] = btn;
+}
+
+const journeyKeys = Object.keys(JOURNEYS);
+const journeyButtons = {};
+const modGroup = document.createElement("span");
+modGroup.className = "btn-group";
+modGroup.hidden = true;
+flowsBox.appendChild(modGroup);
+for (const k of journeyKeys) {
+  const j = JOURNEYS[k];
+  const btn = document.createElement("button");
+  btn.className = "flow-btn";
+  btn.textContent = j.name;
+  btn.style.borderColor = hexA(j.color, 0.5);
+  btn.style.color = "#fff";
+  btn.addEventListener("click", () => { stopShowAll(); runJourney(k); });
+  modGroup.appendChild(btn);
+  journeyButtons[k] = btn;
+}
+
+// розпірка щоб наступні кнопки пішли праворуч
+const spacer = document.createElement("span");
+spacer.className = "flow-btn spacer";
+flowsBox.appendChild(spacer);
+
+// "Бачити все" / Пауза / Авто
+const showAllBtn = document.createElement("button");
+showAllBtn.className = "flow-btn showall";
+showAllBtn.textContent = "Бачити все ⊕";
+showAllBtn.addEventListener("click", toggleShowAll);
+flowsBox.appendChild(showAllBtn);
+
+const pauseBtn = document.createElement("button");
+pauseBtn.className = "flow-btn pause";
+pauseBtn.textContent = "⏸ Пауза";
+pauseBtn.addEventListener("click", togglePause);
+flowsBox.appendChild(pauseBtn);
+
+const autoBtn = document.createElement("button");
+autoBtn.className = "flow-btn auto";
+autoBtn.textContent = "Авто ▶";
+autoBtn.addEventListener("click", toggleAuto);
+flowsBox.appendChild(autoBtn);
+
+/* ====== Переключатель view ====== */
+let currentView = "arch";
+viewToggle.querySelectorAll("button").forEach(b => {
+  b.addEventListener("click", () => setView(b.dataset.view));
+});
+function setView(v) {
+  if (currentView === v) return;
+  stopShowAll();
+  if (autoRunning) {
+    autoRunning = false;
+    autoBtn.textContent = "Авто ▶";
+    autoBtn.classList.remove("active");
+  }
+  currentRun++;
+  Object.values(flowButtons).forEach(b => b.classList.remove("active"));
+  Object.values(journeyButtons).forEach(b => b.classList.remove("active"));
+  resetHighlight();
+  if (modulesRendered) resetHighlightM();
+
+  currentView = v;
+  viewToggle.querySelectorAll("button").forEach(b => {
+    b.classList.toggle("active", b.dataset.view === v);
+  });
+
+  if (v === "arch") {
+    viewArch.hidden = false;
+    viewModules.hidden = true;
+    archGroup.hidden = false;
+    modGroup.hidden = true;
+    canvas.classList.remove("modules");
+    ctrlLabel.textContent = "Потоки:";
+    setStatus("Архітектура — натисни потік або «Бачити все»", "#9bb1ff");
+  } else {
+    viewArch.hidden = true;
+    viewModules.hidden = false;
+    archGroup.hidden = true;
+    modGroup.hidden = false;
+    canvas.classList.add("modules");
+    ctrlLabel.textContent = "Сценарії:";
+    if (!modulesRendered) renderModulesView();
+    setStatus("Модулі системи — оберіть користувацький сценарій", "#c084fc");
+  }
+}
+
+/* ====== Пауза (заморожує vTime) ====== */
+function togglePause() {
+  paused = !paused;
+  pauseBtn.textContent = paused ? "▶ Грати" : "⏸ Пауза";
+  pauseBtn.classList.toggle("active", paused);
+  if (paused) {
+    setStatus("⏸ Пауза — час зупинено", "#f87171");
+  } else {
+    const active = document.querySelector(".flow-btn.active:not(.pause):not(.spacer):not(.showall):not(.auto)");
+    setStatus(active ? active.textContent : "Готово", "#9bb1ff");
+  }
+}
+window.addEventListener("keydown", (e) => {
+  if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  if (e.code === "Space" || e.key === "p" || e.key === "P") {
+    e.preventDefault();
+    togglePause();
+  }
+});
+
+/* ====== Auto loop (працює з поточним view) ====== */
+let autoRunning = false;
+function toggleAuto() {
+  if (showAllActive) stopShowAll();
+  autoRunning = !autoRunning;
+  autoBtn.textContent = autoRunning ? "Авто ⏸" : "Авто ▶";
+  autoBtn.classList.toggle("active", autoRunning);
+  if (autoRunning) loopAuto(0);
+}
+async function loopAuto(i) {
+  if (!autoRunning) return;
+  const keys = currentView === "arch" ? flowKeys : journeyKeys;
+  const k = keys[i % keys.length];
+  if (currentView === "arch") await runFlow(k); else await runJourney(k);
+  if (!autoRunning) return;
+  await vsleep(600);
+  loopAuto(i + 1);
+}
+
+let currentRun = 0;
+
+function setStatus(text, color) {
+  statusTxt.textContent = text;
+  const pulse = statusBox.querySelector(".pulse");
+  if (color) {
+    pulse.style.background = color;
+    pulse.style.boxShadow = `0 0 12px ${color}`;
+  }
+  statusBox.classList.add("show");
+}
+
+/* ====== Arch view: highlight + edges + runFlow ====== */
+function resetHighlight() {
+  for (const id in NODE_BY_ID) {
+    NODE_BY_ID[id].el.classList.remove("hot", "dimmed");
+    NODE_BY_ID[id].el.style.setProperty("--glow", "");
+  }
+  for (const e of EDGES) e._path.classList.remove("hot");
+  svg.querySelectorAll(".particle, .edge-glow.flowtmp, text.partlabel").forEach(n => n.remove());
+}
+function dimAll() { for (const id in NODE_BY_ID) NODE_BY_ID[id].el.classList.add("dimmed"); }
+function lightNode(id, color) {
+  const n = NODE_BY_ID[id]; if (!n) return;
+  n.el.classList.remove("dimmed");
+  n.el.classList.add("hot");
+  n.el.style.setProperty("--glow", hexA(color, 0.45));
+}
+function findEdge(from, to) { return EDGES.find(e => e.from === from && e.to === to); }
+function ensureSyntheticEdge(from, to) {
+  let e = findEdge(from, to); if (e) return e;
+  const a = NODE_BY_ID[from]; const b = NODE_BY_ID[to];
+  if (!a || !b) return null;
+  const path = doc("path");
+  path.setAttribute("d", bezier(a, b));
+  path.setAttribute("class", "edge edge-glow flowtmp");
+  path.style.stroke = "rgba(255,255,255,0.05)";
+  path.style.strokeDasharray = "4 6";
+  svg.appendChild(path);
+  e = { from, to, _path: path, _len: path.getTotalLength(), _synthetic: true };
+  return e;
+}
+async function runFlow(key) {
+  const f = FLOWS[key]; if (!f) return;
+  currentRun++; const myRun = currentRun;
+  Object.values(flowButtons).forEach(b => b.classList.remove("active"));
+  flowButtons[key].classList.add("active");
+  resetHighlight();
+  dimAll();
+  setStatus(f.name, f.color);
+  const ids = new Set();
+  for (const s of f.steps) { ids.add(s.from); ids.add(s.to); }
+  ids.forEach(id => lightNode(id, f.color));
+  const stepDur = 700, stepGap = 380;
+  for (let i = 0; i < f.steps.length; i++) {
+    if (myRun !== currentRun) return;
+    const s = f.steps[i];
+    const e = ensureSyntheticEdge(s.from, s.to);
+    if (e) { e._path.classList.add("hot"); emitParticle(svg, e, f.color, stepDur, s.label); }
+    await vsleep(stepGap);
+  }
+  await vsleep(stepDur + 200);
+  if (myRun !== currentRun) return;
+  svg.querySelectorAll(".edge-glow.flowtmp").forEach(n => n.remove());
+  setStatus(f.name + "  ✓ завершено", f.color);
+}
+
+/* ====== Modules view: рендер, підсвітка, runJourney ====== */
+const MOD_BY_ID = Object.create(null);
+let modulesRendered = false;
+
+function renderModulesView() {
+  const W = 280, H = 170, GAP_X = 60, GAP_Y = 60;
+  const totalW = 3*W + 2*GAP_X;
+  const startY = 90;
+  const rect = canvas.getBoundingClientRect();
+  const startX = Math.max(20, (rect.width - totalW) / 2);
+  svgM.setAttribute("viewBox", `0 0 ${rect.width} ${rect.height}`);
+
+  viewModules.querySelectorAll(".module").forEach(n => n.remove());
+  for (const m of MODULES) {
+    const el = document.createElement("div");
+    el.className = "module";
+    el.style.setProperty("--c", m.color);
+    el.style.left = `${startX + m.col * (W + GAP_X)}px`;
+    el.style.top  = `${startY + m.row * (H + GAP_Y)}px`;
+    el.style.width = W + "px";
+    el.innerHTML = `
+      <div class="m-head">
+        <div class="m-icon">${escapeHtml(m.icon)}</div>
+        <div>
+          <div class="m-title">${escapeHtml(m.name)}</div>
+          <div class="m-sub">${escapeHtml(m.sub || "")}</div>
+        </div>
+      </div>
+      <div class="m-list">
+        ${m.items.map(it => `<div class="it"><span class="tag">${escapeHtml(it.tag)}</span>${escapeHtml(it.text)}</div>`).join("")}
+      </div>
+      <div class="m-foot"><span>${escapeHtml(m.foot || "")}</span><span>${m.items.length} елементів</span></div>
+    `;
+    el.addEventListener("mouseenter", (e) => showTooltip({
+      group:"ui", name:m.name, sub:m.sub,
+      description: m.description,
+      path: m.items.map(i=>`[${i.tag}] ${i.text}`).join("  ·  ")
+    }, e));
+    el.addEventListener("mousemove", moveTooltip);
+    el.addEventListener("mouseleave", hideTooltip);
+    viewModules.appendChild(el);
+    MOD_BY_ID[m.id] = { def: m, el };
+  }
+
+  const cr = canvas.getBoundingClientRect();
+  for (const id in MOD_BY_ID) {
+    const { el } = MOD_BY_ID[id];
+    const r = el.getBoundingClientRect();
+    MOD_BY_ID[id].cx = r.left + r.width/2 - cr.left;
+    MOD_BY_ID[id].cy = r.top  + r.height/2 - cr.top;
+  }
+
+  svgM.innerHTML = "";
+  for (const e of MODULE_EDGES) {
+    const a = MOD_BY_ID[e.from]; const b = MOD_BY_ID[e.to];
+    if (!a || !b) continue;
+    const path = doc("path");
+    path.setAttribute("d", bezier(a, b));
+    path.setAttribute("class", "edge");
+    svgM.appendChild(path);
+    e._path = path;
+    e._len = path.getTotalLength();
+    const mid = path.getPointAtLength(e._len / 2);
+    const t = doc("text");
+    t.setAttribute("x", mid.x);
+    t.setAttribute("y", mid.y - 6);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("fill", "#a8b5d4");
+    t.setAttribute("font-size", "10");
+    t.setAttribute("paint-order", "stroke");
+    t.setAttribute("stroke", "rgba(8,12,30,0.85)");
+    t.setAttribute("stroke-width", "3");
+    t.textContent = e.label || "";
+    svgM.appendChild(t);
+  }
+  modulesRendered = true;
+}
+
+function findModuleEdge(from, to) { return MODULE_EDGES.find(e => e.from === from && e.to === to); }
+function ensureSyntheticModuleEdge(from, to) {
+  let e = findModuleEdge(from, to); if (e) return e;
+  const rev = findModuleEdge(to, from); if (rev) return rev;
+  const a = MOD_BY_ID[from]; const b = MOD_BY_ID[to];
+  if (!a || !b) return null;
+  const path = doc("path");
+  path.setAttribute("d", bezier(a, b));
+  path.setAttribute("class", "edge edge-glow flowtmp");
+  path.style.stroke = "rgba(255,255,255,0.05)";
+  path.style.strokeDasharray = "4 6";
+  svgM.appendChild(path);
+  e = { from, to, _path: path, _len: path.getTotalLength(), _synthetic: true };
+  return e;
+}
+function resetHighlightM() {
+  for (const id in MOD_BY_ID) {
+    MOD_BY_ID[id].el.classList.remove("hot", "dimmed");
+    MOD_BY_ID[id].el.style.setProperty("--glow", "");
+  }
+  for (const e of MODULE_EDGES) if (e._path) e._path.classList.remove("hot");
+  svgM.querySelectorAll(".particle, .edge-glow.flowtmp, text.partlabel").forEach(n => n.remove());
+}
+function dimAllM() { for (const id in MOD_BY_ID) MOD_BY_ID[id].el.classList.add("dimmed"); }
+function lightModule(id, color) {
+  const m = MOD_BY_ID[id]; if (!m) return;
+  m.el.classList.remove("dimmed");
+  m.el.classList.add("hot");
+  m.el.style.setProperty("--glow", hexA(color, 0.5));
+}
+
+async function runJourney(key) {
+  const j = JOURNEYS[key]; if (!j) return;
+  if (!modulesRendered) renderModulesView();
+  currentRun++; const myRun = currentRun;
+  Object.values(journeyButtons).forEach(b => b.classList.remove("active"));
+  journeyButtons[key].classList.add("active");
+  resetHighlightM();
+  dimAllM();
+  setStatus(j.name + " — " + (j.desc || ""), j.color);
+
+  if (j.steps.length) lightModule(j.steps[0].module, j.color);
+  const stepDur = 1000, stepGap = 750;
+  for (let i = 0; i < j.steps.length - 1; i++) {
+    if (myRun !== currentRun) return;
+    const cur = j.steps[i], nxt = j.steps[i+1];
+    const e = ensureSyntheticModuleEdge(cur.module, nxt.module);
+    if (e) { e._path.classList.add("hot"); emitParticle(svgM, e, j.color, stepDur, nxt.label); }
+    await vsleep(stepGap);
+    if (myRun !== currentRun) return;
+    lightModule(nxt.module, j.color);
+    await vsleep(stepDur - stepGap + 250);
+  }
+  if (myRun !== currentRun) return;
+  svgM.querySelectorAll(".edge-glow.flowtmp").forEach(n => n.remove());
+  setStatus(j.name + "  ✓ сценарій завершено", j.color);
+}
+
+/* ====== Show all (адаптовано до поточного view) ====== */
+let showAllActive = false;
+let showAllTokens = [];
+
+function stopShowAll() {
+  if (!showAllActive) return;
+  showAllActive = false;
+  showAllBtn.textContent = "Бачити все ⊕";
+  showAllBtn.classList.remove("active");
+  showAllTokens.forEach(t => t.stop = true);
+  showAllTokens = [];
+  resetHighlight();
+  if (modulesRendered) resetHighlightM();
+}
+
+function toggleShowAll() {
+  if (showAllActive) { stopShowAll(); setStatus("Готово", "#9bb1ff"); return; }
+  if (autoRunning) {
+    autoRunning = false; autoBtn.textContent = "Авто ▶"; autoBtn.classList.remove("active");
+  }
+  currentRun++;
+  Object.values(flowButtons).forEach(b => b.classList.remove("active"));
+  Object.values(journeyButtons).forEach(b => b.classList.remove("active"));
+
+  showAllActive = true;
+  showAllBtn.textContent = "Бачити все ⊗";
+  showAllBtn.classList.add("active");
+
+  if (currentView === "arch") {
+    resetHighlight();
+    for (const id in NODE_BY_ID) {
+      const node = NODE_BY_ID[id];
+      const c = getComputedStyle(document.documentElement)
+        .getPropertyValue("--c-" + node.def.group).trim();
+      node.el.classList.add("hot");
+      node.el.style.setProperty("--glow", hexA(c || "#9bb1ff", 0.38));
+    }
+    const used = new Set();
+    for (const k of flowKeys) for (const s of FLOWS[k].steps) used.add(s.from + "→" + s.to);
+    for (const e of EDGES) if (used.has(e.from + "→" + e.to)) e._path.classList.add("hot");
+    setStatus("Бачити все · усі потоки одночасно", "#c084fc");
+
+    showAllTokens = flowKeys.map((k, i) => {
+      const token = { stop: false };
+      (async function loop() {
+        await vsleep(i * 220);
+        while (!token.stop && showAllActive) {
+          const f = FLOWS[k];
+          for (const s of f.steps) {
+            if (token.stop || !showAllActive) return;
+            const e = ensureSyntheticEdge(s.from, s.to);
+            if (e) emitParticle(svg, e, f.color, 850, null);
+            await vsleep(360);
+          }
+          await vsleep(900);
+        }
+      })();
+      return token;
+    });
+  } else {
+    if (!modulesRendered) renderModulesView();
+    resetHighlightM();
+    for (const id in MOD_BY_ID) {
+      const c = MOD_BY_ID[id].def.color;
+      MOD_BY_ID[id].el.classList.add("hot");
+      MOD_BY_ID[id].el.style.setProperty("--glow", hexA(c, 0.45));
+    }
+    for (const e of MODULE_EDGES) if (e._path) e._path.classList.add("hot");
+    setStatus("Бачити все · усі сценарії одночасно", "#c084fc");
+
+    showAllTokens = journeyKeys.map((k, i) => {
+      const token = { stop: false };
+      (async function loop() {
+        await vsleep(i * 280);
+        while (!token.stop && showAllActive) {
+          const j = JOURNEYS[k];
+          for (let n = 0; n < j.steps.length - 1; n++) {
+            if (token.stop || !showAllActive) return;
+            const cur = j.steps[n], nxt = j.steps[n+1];
+            const e = ensureSyntheticModuleEdge(cur.module, nxt.module);
+            if (e) emitParticle(svgM, e, j.color, 1100, null);
+            await vsleep(600);
+          }
+          await vsleep(1200);
+        }
+      })();
+      return token;
+    });
+  }
+}
+
+/* ====== Частинки (універсальні — приймають svgHost) ====== */
+function emitParticle(svgHost, edge, color, duration, label) {
+  const NS = "http://www.w3.org/2000/svg";
+  const p = document.createElementNS(NS, "circle");
+  p.setAttribute("r", 4);
+  p.setAttribute("class", "particle");
+  p.style.color = color; p.style.fill = color;
+  svgHost.appendChild(p);
+
+  let txt = null;
+  if (label) {
+    txt = document.createElementNS(NS, "text");
+    txt.setAttribute("class", "partlabel");
+    txt.textContent = label;
+    txt.setAttribute("fill", "#e4ecff");
+    txt.setAttribute("font-size", "10");
+    txt.setAttribute("text-anchor", "middle");
+    txt.setAttribute("paint-order", "stroke");
+    txt.setAttribute("stroke", "rgba(8,12,30,0.85)");
+    txt.setAttribute("stroke-width", "3");
+    svgHost.appendChild(txt);
+  }
+
+  const startV = vTime;
+  const len = edge._len;
+  function tick() {
+    const t = Math.min(1, (vTime - startV) / duration);
+    const ease = t < 0.5 ? 2*t*t : -1 + (4-2*t)*t;
+    const pt = edge._path.getPointAtLength(len * ease);
+    p.setAttribute("cx", pt.x); p.setAttribute("cy", pt.y);
+    p.setAttribute("r", 4 + Math.sin(t * Math.PI) * 2);
+    p.style.opacity = (1 - Math.pow(t, 3)).toFixed(3);
+    if (txt) {
+      txt.setAttribute("x", pt.x); txt.setAttribute("y", pt.y - 10);
+      txt.style.opacity = (Math.sin(t * Math.PI)).toFixed(3);
+    }
+    if (t < 1) requestAnimationFrame(tick);
+    else { p.remove(); if (txt) txt.remove(); }
+  }
+  requestAnimationFrame(tick);
+}
+
+function hexA(hex, a) {
+  const h = (hex || "#9bb1ff").replace("#","");
+  const r = parseInt(h.substring(0,2),16);
+  const g = parseInt(h.substring(2,4),16);
+  const b = parseInt(h.substring(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+/* =========================================================
+   5. Init + resize + ambient
+   ========================================================= */
+layoutAndRender();
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (showAllActive) stopShowAll();
+    resetHighlight();
+    layoutAndRender();
+    if (modulesRendered) {
+      modulesRendered = false;
+      if (currentView === "modules") renderModulesView();
+    }
+  }, 120);
+});
+
+// фоновий "пульс" — поважає паузу і активні режими, працює з поточним view
+(async function ambient() {
+  while (true) {
+    await vsleep(700 + Math.random() * 900);
+    if (showAllActive || autoRunning) continue;
+    if (document.querySelector(".flow-btn.active:not(.pause):not(.spacer):not(.showall):not(.auto)")) continue;
+    if (currentView === "arch") {
+      const e = EDGES[Math.floor(Math.random() * EDGES.length)];
+      if (e && e._path) emitParticle(svg, e, "#9bb1ff", 1300);
+    } else if (modulesRendered) {
+      const e = MODULE_EDGES[Math.floor(Math.random() * MODULE_EDGES.length)];
+      if (e && e._path) emitParticle(svgM, e, "#9bb1ff", 1500);
+    }
+  }
+})();
+
+// при першому показі — авто-програти "Boot" один раз
+setTimeout(() => runFlow("clientInfo"), 500);
+</script>
+</body>
+</html>

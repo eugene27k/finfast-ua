@@ -95,6 +95,7 @@ interface DataContextValue {
   token: string;
   setToken: (t: string) => void;
   clearToken: () => void;
+  logout: () => void;
   tokenReady: boolean;
   client: MonobankClientInfo | null;
   clientLoading: boolean;
@@ -145,40 +146,34 @@ export default function DataProvider({
     setTokenState(t);
   }, []);
 
+  // Removes only the Monobank token; account data (categories, overrides) stays.
   const clearToken = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem("finfast_user_id");
     sessionStorage.removeItem(CLIENT_CACHE_KEY);
     setTokenState("");
-    setUserId(null);
-    setCustomCategories([]);
-    setOverrides({});
   }, []);
 
-  // --- User ID ---
+  // Full sign-out: end the server session and return to the login screen.
+  const logout = useCallback(async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ignore — navigate away regardless
+    }
+    window.location.href = "/login";
+  }, []);
+
+  // --- User ID (from the authenticated session) ---
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) return;
-    const savedUserId = localStorage.getItem("finfast_user_id");
-    if (savedUserId) {
-      setUserId(savedUserId);
-      return;
-    }
-    fetch("/api/user", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ monoToken: token }),
-    })
-      .then((r) => r.json())
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data.userId) {
-          localStorage.setItem("finfast_user_id", data.userId);
-          setUserId(data.userId);
-        }
+        if (data?.userId) setUserId(data.userId);
       })
       .catch(() => {});
-  }, [token]);
+  }, []);
 
   // --- Custom categories ---
   const [customCategories, setCustomCategories] = useState<CustomCategoryData[]>([]);
@@ -404,6 +399,7 @@ export default function DataProvider({
       token,
       setToken,
       clearToken,
+      logout,
       tokenReady,
       client,
       clientLoading,
@@ -429,6 +425,7 @@ export default function DataProvider({
       token,
       setToken,
       clearToken,
+      logout,
       tokenReady,
       client,
       clientLoading,

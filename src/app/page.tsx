@@ -1,23 +1,9 @@
-"use client";
+import { redirect } from "next/navigation";
+import { needsSetup } from "@/lib/auth/bootstrap";
+import { serverUserId } from "@/lib/auth/session";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-
-export default function Home() {
-  const router = useRouter();
-
-  useEffect(() => {
-    const token = localStorage.getItem("finfast_mono_token");
-    if (token) {
-      router.replace("/dashboard");
-    } else {
-      router.replace("/settings");
-    }
-  }, [router]);
-
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse text-gray-400 text-lg">Завантаження...</div>
-    </div>
-  );
+export default async function Home() {
+  if (needsSetup()) redirect("/setup");
+  const userId = await serverUserId();
+  redirect(userId ? "/dashboard" : "/login");
 }

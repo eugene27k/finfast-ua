@@ -1,21 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth/session";
 import { getStatement } from "@/lib/monobank";
 
 export async function POST(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const userId = auth.userId;
+
   const body = await request.json();
-  const { userId, token, accountIds } = body as {
-    userId: string;
+  const { token, accountIds } = body as {
     token: string;
     accountIds: string[];
   };
 
-  if (!userId || !token || !accountIds?.length) {
+  if (!token || !accountIds?.length) {
     return NextResponse.json(
-      { error: "userId, token, and accountIds are required" },
+      { error: "token and accountIds are required" },
       { status: 400 }
     );
   }
+
+  const db = getDb();
 
   // Calculate previous month range
   const now = new Date();
@@ -25,7 +31,7 @@ export async function POST(request: NextRequest) {
   const to = Math.floor(prevMonthEnd.getTime() / 1000);
 
   // Check if we already have data for this period
-  const existing = await prisma.transaction.count({
+  const existing = await db.transaction.count({
     where: {
       userId,
       time: { gte: from, lte: to },
@@ -48,7 +54,7 @@ export async function POST(request: NextRequest) {
         if (data.length > 0) {
           for (const tx of data) {
             try {
-              await prisma.transaction.upsert({
+              await db.transaction.upsert({
                 where: { id: tx.id },
                 create: {
                   id: tx.id,

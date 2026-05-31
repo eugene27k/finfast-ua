@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth/session";
 
 // POST /api/manual-transactions — create transaction on a manual account
 export async function POST(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
   const body = await request.json();
   const { manualAccountId, amount, description, time } = body;
 
@@ -10,7 +14,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  const tx = await prisma.manualTransaction.create({
+  const db = getDb();
+  // Verify the account belongs to the caller.
+  const owned = await db.manualAccount.findFirst({
+    where: { id: manualAccountId, userId: auth.userId },
+    select: { id: true },
+  });
+  if (!owned) {
+    return NextResponse.json({ error: "Account not found" }, { status: 404 });
+  }
+
+  const tx = await db.manualTransaction.create({
     data: {
       manualAccountId,
       amount: Math.round(amount),
@@ -24,17 +38,28 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/manual-transactions?id=...
 export async function DELETE(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
   const id = request.nextUrl.searchParams.get("id");
   if (!id) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
-  await prisma.manualTransaction.delete({ where: { id } });
+  const deleted = await getDb().manualTransaction.deleteMany({
+    where: { id, account: { userId: auth.userId } },
+  });
+  if (deleted.count === 0) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   return NextResponse.json({ ok: true });
 }
 
 // PUT /api/manual-transactions — update transaction
 export async function PUT(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
   const body = await request.json();
   const { id, amount, description, time } = body;
 
@@ -47,10 +72,12 @@ export async function PUT(request: NextRequest) {
   if (description) data.description = description.trim();
   if (time) data.time = time;
 
-  const tx = await prisma.manualTransaction.update({
-    where: { id },
+  const updated = await getDb().manualTransaction.updateMany({
+    where: { id, account: { userId: auth.userId } },
     data,
   });
-
-  return NextResponse.json({ transaction: tx });
+  if (updated.count === 0) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true });
 }

@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useData } from "@/components/DataProvider";
-import { CATEGORY_NAMES, getCategoryColor } from "@/lib/mcc";
+import { getMccCategory, getCategoryColor } from "@/lib/mcc";
 
 interface CategoryDropdownProps {
   transactionId: string;
+  mcc: number;
   currentCategory: string;
   currentColor: string;
 }
@@ -18,6 +19,7 @@ const PRESET_COLORS = [
 
 export default function CategoryDropdown({
   transactionId,
+  mcc,
   currentCategory,
   currentColor,
 }: CategoryDropdownProps) {
@@ -82,7 +84,8 @@ export default function CategoryDropdown({
   };
 
   const isOverridden = !!overrides[transactionId];
-  const monoCategories = CATEGORY_NAMES.filter((n) => n !== "Інше");
+  const monoCategory = getMccCategory(mcc);
+  const monoColor = getCategoryColor(monoCategory);
 
   return (
     <div className="relative inline-block" ref={ref}>
@@ -112,45 +115,53 @@ export default function CategoryDropdown({
             {isOverridden && (
               <button
                 onClick={() => handleSelect(null)}
-                className="w-full text-left px-3 py-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-b border-gray-100 dark:border-gray-700"
+                className="w-full text-left px-3 py-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-b border-gray-100 dark:border-gray-700 flex items-center gap-1.5"
               >
-                Скинути до авто-категорії (MCC)
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                </svg>
+                Скинути до Mono-категорії
               </button>
             )}
 
             <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-900">
-              Категорії Mono
+              Mono-категорія (з MCC {mcc})
             </div>
-            {monoCategories.map((name) => (
-              <button
-                key={name}
-                onClick={() => handleSelect(null)}
-                className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${
-                  currentCategory === name && !isOverridden ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400" : "text-gray-700 dark:text-gray-300"
-                }`}
-              >
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: getCategoryColor(name) }} />
-                {name}
-              </button>
-            ))}
+            <div className="px-3 py-2 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: monoColor }} />
+              <span className="flex-1">{monoCategory}</span>
+              {!isOverridden && (
+                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium uppercase tracking-wider">
+                  активна
+                </span>
+              )}
+            </div>
 
             {customCategories.length > 0 && (
               <>
                 <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-700">
-                  Ваші категорії
+                  Мої категорії
                 </div>
-                {customCategories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => handleSelect(cat.id)}
-                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${
-                      currentCategory === cat.name && isOverridden ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400" : "text-gray-700 dark:text-gray-300"
-                    }`}
-                  >
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                    {cat.name}
-                  </button>
-                ))}
+                {customCategories.map((cat) => {
+                  const isActive = currentCategory === cat.name && isOverridden;
+                  return (
+                    <button
+                      key={cat.id}
+                      onClick={() => handleSelect(cat.id)}
+                      className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${
+                        isActive ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400" : "text-gray-700 dark:text-gray-300"
+                      }`}
+                    >
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                      <span className="flex-1">{cat.name}</span>
+                      {isActive && (
+                        <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
               </>
             )}
 

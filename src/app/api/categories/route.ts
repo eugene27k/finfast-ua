@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get("userId");
-  if (!userId) {
-    return NextResponse.json({ error: "userId is required" }, { status: 400 });
-  }
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
 
   try {
-    const categories = await prisma.customCategory.findMany({
-      where: { userId },
+    const categories = await getDb().customCategory.findMany({
+      where: { userId: auth.userId },
       orderBy: { createdAt: "asc" },
     });
     return NextResponse.json({ categories });
@@ -20,24 +19,24 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const { userId, name, color } = await request.json();
-    if (!userId || !name || !color) {
+    const { name, color } = await request.json();
+    if (!name || !color) {
       return NextResponse.json(
-        { error: "userId, name, and color are required" },
+        { error: "name and color are required" },
         { status: 400 }
       );
     }
 
-    const category = await prisma.customCategory.create({
-      data: { userId, name, color },
+    const category = await getDb().customCategory.create({
+      data: { userId: auth.userId, name, color },
     });
     return NextResponse.json({ category });
   } catch (error: unknown) {
-    if (
-      error instanceof Error &&
-      error.message.includes("Unique constraint")
-    ) {
+    if (error instanceof Error && error.message.includes("Unique constraint")) {
       return NextResponse.json(
         { error: "Категорія з такою назвою вже існує" },
         { status: 409 }
@@ -49,17 +48,29 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
   const id = request.nextUrl.searchParams.get("id");
   if (!id) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
   try {
-    // Remove overrides referencing this category first
-    await prisma.transactionOverride.deleteMany({
-      where: { customCategoryId: id },
+    const db = getDb();
+    // Ownership check — only delete the caller's own category.
+    const owned = await db.customCategory.findFirst({
+      where: { id, userId: auth.userId },
+      select: { id: true },
     });
-    await prisma.customCategory.delete({ where: { id } });
+    if (!owned) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    await db.transactionOverride.deleteMany({
+      where: { userId: auth.userId, customCategoryId: id },
+    });
+    await db.customCategory.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

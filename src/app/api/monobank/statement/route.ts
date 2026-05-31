@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStatement } from "@/lib/monobank";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
   const token = request.headers.get("x-mono-token");
   if (!token) {
     return NextResponse.json({ error: "Token is required" }, { status: 400 });
@@ -28,8 +32,8 @@ export async function GET(request: NextRequest) {
       to ? parseInt(to) : undefined
     );
 
-    // Persist transactions to DB (fire-and-forget)
-    persistTransactions(token, accountId, data);
+    // Persist transactions to DB (fire-and-forget), scoped to the session user.
+    persistTransactions(auth.userId, accountId, data);
 
     return NextResponse.json(data);
   } catch (error) {
@@ -48,7 +52,7 @@ export async function GET(request: NextRequest) {
 }
 
 async function persistTransactions(
-  token: string,
+  userId: string,
   accountId: string,
   data: Array<{
     id: string;
@@ -73,20 +77,15 @@ async function persistTransactions(
 ) {
   try {
     if (data.length === 0) return;
-
-    const user = await prisma.user.findUnique({
-      where: { monoToken: token },
-      select: { id: true },
-    });
-    if (!user) return;
+    const db = getDb();
 
     // SQLite adapter doesn't support skipDuplicates, use individual upserts
     for (const tx of data) {
-      await prisma.transaction.upsert({
+      await db.transaction.upsert({
         where: { id: tx.id },
         create: {
           id: tx.id,
-          userId: user.id,
+          userId,
           accountId,
           time: tx.time,
           description: tx.description,
