@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useData, type ManualAccountData, type ManualTransactionData, type FetchProgress } from "@/components/DataProvider";
 import RefreshButton from "@/components/RefreshButton";
 import CategoryDropdown from "@/components/CategoryDropdown";
+import AiCategorizationPanel from "@/components/AiCategorizationPanel";
 import { formatAmount, getCurrencyInfo } from "@/lib/currency";
 import { CATEGORY_NAMES, getEffectiveCategory, getCategoryColor } from "@/lib/mcc";
 import { useCurrencyRates } from "@/lib/hooks";
@@ -449,6 +450,7 @@ function TransactionsContent() {
   const [period, setPeriod] = useState(30);
   const [search, setSearch] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [showAiPanel, setShowAiPanel] = useState(false);
 
   const periodFrom = useMemo(
     () => Math.floor(Date.now() / 1000) - period * 24 * 60 * 60,
@@ -569,6 +571,30 @@ function TransactionsContent() {
     return result;
   }, [allTransactions, search, selectedCategories]);
 
+  const uncategorizedForAi = useMemo(() => {
+    const result: { id: string; description: string; mcc: number; originalMcc: number; amount: number; counterName?: string; counterEdrpou?: string; comment?: string }[] = [];
+    for (const [accId, txList] of Object.entries(statements)) {
+      for (const tx of txList as MonobankStatement[]) {
+        if (tx.time < periodFrom) continue;
+        if (overrides[tx.id]) continue;
+        const cat = getEffectiveCategory(tx.mcc, tx.id, overrides);
+        if (cat.name !== "Інше") continue;
+        if (tx.amount >= 0) continue;
+        result.push({
+          id: tx.id,
+          description: tx.description,
+          mcc: tx.mcc,
+          originalMcc: tx.originalMcc,
+          amount: tx.amount,
+          counterName: tx.counterName || undefined,
+          counterEdrpou: tx.counterEdrpou || undefined,
+          comment: tx.comment || undefined,
+        });
+      }
+    }
+    return result;
+  }, [statements, periodFrom, overrides]);
+
   const totalIncome = filtered
     .filter((i) => i.amount > 0)
     .reduce((sum, i) => sum + toUah(i.amount, i.currencyCode, currencyRates), 0);
@@ -629,6 +655,21 @@ function TransactionsContent() {
         </div>
         <div className="flex items-center gap-3">
           <RefreshButton onClick={refresh} loading={statementsLoading} lastRefreshedAt={lastRefreshedAt} />
+          {uncategorizedForAi.length > 0 && (
+            <button
+              onClick={() => setShowAiPanel(!showAiPanel)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                showAiPanel
+                  ? "bg-purple-700 text-white"
+                  : "bg-purple-600 hover:bg-purple-700 text-white"
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              AI ({uncategorizedForAi.length})
+            </button>
+          )}
           <button
             onClick={() => { setEditingTx(null); setShowForm(!showForm); }}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
@@ -652,6 +693,14 @@ function TransactionsContent() {
               ? filterAccountId
               : undefined
           }
+        />
+      )}
+
+      {showAiPanel && uncategorizedForAi.length > 0 && (
+        <AiCategorizationPanel
+          uncategorizedTxs={uncategorizedForAi}
+          onClose={() => setShowAiPanel(false)}
+          onApplied={() => {}}
         />
       )}
 
