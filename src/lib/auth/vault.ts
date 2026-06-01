@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { openDb, closeDb } from "@/lib/prisma";
+import { openDb, closeDb, closeDbAndWait } from "@/lib/prisma";
 
 /**
  * In-memory vault: holds the active encryption key (DEK) and live sessions.
@@ -44,6 +44,18 @@ export function lockVault(): void {
   v.dekHex = null;
   v.sessions.clear();
   closeDb();
+}
+
+/**
+ * Seal the vault and fully release the database file handle. Use this (instead
+ * of lockVault) when the DB file is about to be deleted, so Windows does not
+ * keep it locked.
+ */
+export async function destroyVault(): Promise<void> {
+  const v = vault();
+  v.dekHex = null;
+  v.sessions.clear();
+  await closeDbAndWait();
 }
 
 export function isUnlocked(): boolean {

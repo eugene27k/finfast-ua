@@ -13,11 +13,24 @@ export default function SetupForm() {
   const [error, setError] = useState<string | null>(null);
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Offer a strong password by default — the user can keep, regenerate, or replace it.
   useEffect(() => {
     setPassword(generatePassword());
   }, []);
+
+  // The recovery key is shown only once. While it's on screen and not yet
+  // acknowledged, warn before the page is reloaded/closed so it can't be lost.
+  useEffect(() => {
+    if (!recoveryKey || acknowledged) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [recoveryKey, acknowledged]);
 
   const errorText = (code: string) => {
     switch (code) {
@@ -59,24 +72,53 @@ export default function SetupForm() {
 
   // Step 2 — show the one-time recovery key.
   if (recoveryKey) {
+    const downloadKey = () => {
+      const text = `FinFast UA — ключ відновлення\n\n${recoveryKey}\n\nЦей ключ потрібен, щоб відновити доступ, якщо ви забудете пароль.\nЗберігайте його в безпечному місці й нікому не показуйте.`;
+      const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "finfast-recovery-key.txt";
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
     return (
       <Shell title="Збережіть ключ відновлення">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Це ваш <strong>єдиний</strong> спосіб відновити доступ, якщо ви забудете пароль.
-          Ваші дані зашифровані цим паролем — без нього і без цього ключа їх неможливо
-          розшифрувати. Запишіть ключ і зберігайте в безпечному місці.
-        </p>
-        <div className="bg-gray-900 dark:bg-black text-green-400 font-mono text-sm tracking-wider p-4 rounded-lg break-all select-all">
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 p-3 rounded-lg text-sm">
+          ⚠️ Цей ключ показується <strong>лише один раз</strong>. Якщо ви забудете пароль — це{" "}
+          <strong>єдиний</strong> спосіб відновити доступ до даних. Збережіть його зараз.
+        </div>
+
+        <div className="bg-gray-900 dark:bg-black text-green-400 font-mono text-base tracking-wider p-4 rounded-lg break-all select-all text-center">
           {recoveryKey}
         </div>
-        <button
-          type="button"
-          onClick={() => navigator.clipboard?.writeText(recoveryKey)}
-          className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-        >
-          Скопіювати ключ
-        </button>
-        <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await navigator.clipboard?.writeText(recoveryKey);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              } catch {
+                /* clipboard blocked — use Download instead */
+              }
+            }}
+            className="flex-1 px-4 py-2 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors"
+          >
+            {copied ? "✓ Скопійовано" : "Скопіювати"}
+          </button>
+          <button
+            type="button"
+            onClick={downloadKey}
+            className="flex-1 px-4 py-2 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors"
+          >
+            Завантажити файлом
+          </button>
+        </div>
+
+        <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer pt-1">
           <input
             type="checkbox"
             checked={acknowledged}
@@ -85,6 +127,7 @@ export default function SetupForm() {
           />
           Я зберіг(ла) ключ відновлення в безпечному місці.
         </label>
+
         <button
           type="button"
           onClick={() => {
@@ -94,8 +137,11 @@ export default function SetupForm() {
           disabled={!acknowledged}
           className="w-full px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          Перейти до додатку
+          {acknowledged ? "Перейти до додатку" : "Спершу збережіть ключ ↑"}
         </button>
+        <p className="text-xs text-gray-400 dark:text-gray-500 text-center">
+          Загубили? Новий ключ можна згенерувати будь-коли в Налаштуваннях.
+        </p>
       </Shell>
     );
   }

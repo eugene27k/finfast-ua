@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getDb } from "@/lib/prisma";
+import { requireUser } from "@/lib/auth/session";
 
 interface TxInput {
   id: string;
@@ -20,16 +21,18 @@ interface AiSuggestion {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const { userId, transactions, categories } = await request.json() as {
-      userId: string;
+    const { transactions, categories } = await request.json() as {
       transactions: TxInput[];
       categories: string[];
     };
 
-    if (!userId || !transactions?.length || !categories?.length) {
+    if (!transactions?.length || !categories?.length) {
       return NextResponse.json(
-        { error: "userId, transactions, and categories are required" },
+        { error: "transactions and categories are required" },
         { status: 400 }
       );
     }
@@ -41,8 +44,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
+    const user = await getDb().user.findUnique({
+      where: { id: auth.userId },
       select: { openaiApiKey: true },
     });
 

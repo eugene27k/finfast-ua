@@ -6,6 +6,8 @@ import SpendingChart from "@/components/SpendingChart";
 import DailyChart from "@/components/DailyChart";
 import AccountFilter from "@/components/AccountFilter";
 import RefreshButton from "@/components/RefreshButton";
+import DateRangeFilter, { getDefaultRange, type DateRange } from "@/components/DateRangeFilter";
+import { useDbHistory } from "@/lib/useDbHistory";
 import { getEffectiveCategory } from "@/lib/mcc";
 import { formatAmount } from "@/lib/currency";
 import { useMonthComparison } from "@/lib/useMonthComparison";
@@ -20,6 +22,7 @@ export default function AnalyticsPage() {
     statementsLoading: loading,
     refresh,
     getFiltered,
+    from: liveFrom,
     lastRefreshedAt,
     overrides,
   } = useData();
@@ -27,19 +30,31 @@ export default function AnalyticsPage() {
 
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [hideEmpty, setHideEmpty] = useState(false);
-  const [period, setPeriod] = useState(30);
-
-  const periodFrom = useMemo(
-    () => Math.floor(Date.now() / 1000) - period * 24 * 60 * 60,
-    [period]
-  );
+  const [range, setRange] = useState<DateRange>(getDefaultRange);
 
   const currencyCode = client?.accounts[0]?.currencyCode || 980;
 
+  // Older portions of the range come from persisted DB history (live data is ~30 days).
+  const needHistory = range.from < liveFrom;
+  const { history, loading: historyLoading } = useDbHistory(
+    range.from,
+    range.to,
+    selectedAccounts,
+    needHistory
+  );
+
   const transactions = useMemo(() => {
-    const all = getFiltered(selectedAccounts);
-    return all.filter((tx) => tx.time >= periodFrom);
-  }, [getFiltered, selectedAccounts, periodFrom]);
+    const live = getFiltered(selectedAccounts).filter(
+      (tx) => tx.time >= range.from && tx.time <= range.to
+    );
+    if (!needHistory) return live;
+    // Merge in stored history, de-duplicating by transaction id.
+    const seen = new Set(live.map((tx) => tx.id));
+    const extra = history.filter(
+      (tx) => !seen.has(tx.id) && tx.time >= range.from && tx.time <= range.to
+    );
+    return [...live, ...extra].sort((a, b) => b.time - a.time);
+  }, [getFiltered, selectedAccounts, range.from, range.to, needHistory, history]);
 
   const categoryBreakdown = useMemo(() => {
     const expenses = transactions.filter((tx) => tx.amount < 0);
@@ -84,37 +99,19 @@ export default function AnalyticsPage() {
           />
         )}
         <div className="flex items-center gap-2">
-          <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1 w-fit">
-            {[
-              { label: "7 днів", value: 7 },
-              { label: "14 днів", value: 14 },
-              { label: "30 днів", value: 30 },
-            ].map((p) => (
-              <button
-                key={p.value}
-                onClick={() => setPeriod(p.value)}
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  period === p.value
-                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
-                    : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <DateRangeFilter onChange={setRange} />
           <span className="relative group">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-gray-400 cursor-help">
               <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a.75.75 0 1 1-1.061-1.061 .75.75 0 0 1 1.06 1.06ZM10 15a1 1 0 0 1-1-1v-4a1 1 0 1 1 2 0v4a1 1 0 0 1-1 1Z" clipRule="evenodd" />
             </svg>
-            <span className="invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-6 w-56 bg-gray-800 dark:bg-gray-700 text-white text-[11px] leading-tight rounded-lg px-3 py-2 z-50 shadow-lg">
-              Monobank API дозволяє отримати виписку максимум за 31 день за один запит.
+            <span className="invisible group-hover:visible absolute left-1/2 -translate-x-1/2 top-6 w-64 bg-gray-800 dark:bg-gray-700 text-white text-[11px] leading-tight rounded-lg px-3 py-2 z-50 shadow-lg">
+              Свіжі дані охоплюють останні ~30 днів. За старіші періоди показуються транзакції, які вже збережені у застосунку.
             </span>
           </span>
         </div>
       </div>
 
-      {loading ? (
+      {loading || historyLoading ? (
         <div className="animate-pulse text-gray-400 p-8 text-center">
           Завантаження аналітики...
         </div>

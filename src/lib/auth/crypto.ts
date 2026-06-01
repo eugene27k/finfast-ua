@@ -4,7 +4,7 @@ import {
   createCipheriv,
   createDecipheriv,
 } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
 /**
@@ -135,6 +135,11 @@ export function writeKeystore(ks: Keystore): void {
   const tmp = `${KEYSTORE_PATH}.tmp`;
   writeFileSync(tmp, JSON.stringify(ks, null, 2), { mode: 0o600 });
   renameSync(tmp, KEYSTORE_PATH);
+}
+
+/** Permanently remove the keystore. After this, needsSetup() is true again. */
+export function deleteKeystore(): void {
+  rmSync(KEYSTORE_PATH, { force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 export function newKeystore(): Keystore {

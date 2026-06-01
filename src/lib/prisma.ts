@@ -41,6 +41,22 @@ export function closeDb(): void {
   }
 }
 
+/**
+ * Like closeDb, but awaits the disconnect so the underlying SQLite file handle
+ * is actually released. Required before deleting the database file on Windows,
+ * where an open handle keeps the file locked.
+ */
+export async function closeDbAndWait(): Promise<void> {
+  const existing = globalForDb.__finfastDb;
+  if (!existing) return;
+  globalForDb.__finfastDb = null;
+  try {
+    await existing.client.$disconnect();
+  } catch {
+    // already gone — nothing to release
+  }
+}
+
 export function isDbOpen(): boolean {
   return !!globalForDb.__finfastDb;
 }

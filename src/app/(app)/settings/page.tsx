@@ -30,6 +30,94 @@ export default function SettingsPage() {
   const [pwdSaving, setPwdSaving] = useState(false);
   const [pwdResult, setPwdResult] = useState<{ ok: boolean; message: string } | null>(null);
 
+  // --- Recovery key (regenerate) ---
+  const [rkPassword, setRkPassword] = useState("");
+  const [rkBusy, setRkBusy] = useState(false);
+  const [rkKey, setRkKey] = useState<string | null>(null);
+  const [rkError, setRkError] = useState<string | null>(null);
+  const [rkCopied, setRkCopied] = useState(false);
+
+  // --- Delete account (irreversible) ---
+  const DELETE_CONFIRM_WORD = "Видалити";
+  const [delPassword, setDelPassword] = useState("");
+  const [delConfirm, setDelConfirm] = useState("");
+  const [delBusy, setDelBusy] = useState(false);
+  const [delError, setDelError] = useState<string | null>(null);
+  const canDelete =
+    !!delPassword && delConfirm.trim() === DELETE_CONFIRM_WORD && !delBusy;
+
+  const handleDeleteAccount = async () => {
+    if (!canDelete) return;
+    setDelError(null);
+    setDelBusy(true);
+    try {
+      const res = await fetch("/api/auth/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: delPassword, confirm: delConfirm.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg =
+          data.error === "WRONG_PASSWORD"
+            ? "Пароль невірний."
+            : data.error === "CONFIRM_MISMATCH"
+            ? `Введіть слово «${DELETE_CONFIRM_WORD}» точно.`
+            : data.error || "Помилка видалення.";
+        throw new Error(msg);
+      }
+      // Account + database are gone. Wipe any leftover app data from the browser
+      // (Monobank token, caches, budgets) so nothing carries over, then send the
+      // user to the first-run registration screen.
+      try {
+        for (const k of Object.keys(localStorage)) {
+          if (k.startsWith("finfast_")) localStorage.removeItem(k);
+        }
+        sessionStorage.clear();
+      } catch {
+        /* storage unavailable — ignore */
+      }
+      window.location.href = "/setup";
+    } catch (e) {
+      setDelError(e instanceof Error ? e.message : "Помилка видалення.");
+      setDelBusy(false);
+    }
+  };
+
+  const handleRegenerateRecovery = async () => {
+    setRkError(null);
+    setRkBusy(true);
+    try {
+      const res = await fetch("/api/auth/recovery-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: rkPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          data.error === "WRONG_PASSWORD" ? "Пароль невірний." : data.error || "Помилка"
+        );
+      }
+      setRkKey(data.recoveryKey);
+      setRkPassword("");
+    } catch (e) {
+      setRkError(e instanceof Error ? e.message : "Помилка");
+    } finally {
+      setRkBusy(false);
+    }
+  };
+
+  const downloadRecoveryKey = (key: string) => {
+    const text = `FinFast UA — ключ відновлення\n\n${key}\n\nЦей ключ потрібен, щоб відновити доступ, якщо ви забудете пароль.\nЗберігайте його в безпечному місці й нікому не показуйте.`;
+    const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "finfast-recovery-key.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleChangePassword = async () => {
     setPwdResult(null);
     if (newPassword.length < 8) {
@@ -365,6 +453,84 @@ export default function SettingsPage() {
 
       {userId && (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+            Ключ відновлення
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Якщо ви забудете пароль — лише цей ключ дозволить відновити доступ. Згенеруйте новий,
+            якщо втратили попередній або хочете його замінити (старий перестане діяти).
+          </p>
+
+          {rkKey ? (
+            <div className="space-y-3">
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 p-3 rounded-lg text-sm">
+                ⚠️ Збережіть зараз — показується <strong>лише один раз</strong>. Попередній ключ більше не діє.
+              </div>
+              <div className="bg-gray-900 dark:bg-black text-green-400 font-mono text-base tracking-wider p-4 rounded-lg break-all select-all text-center">
+                {rkKey}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard?.writeText(rkKey);
+                      setRkCopied(true);
+                      setTimeout(() => setRkCopied(false), 2000);
+                    } catch {
+                      /* clipboard blocked */
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors"
+                >
+                  {rkCopied ? "✓ Скопійовано" : "Скопіювати"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadRecoveryKey(rkKey)}
+                  className="flex-1 px-4 py-2 text-sm font-medium border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors"
+                >
+                  Завантажити файлом
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRkKey(null)}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Готово
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={rkPassword}
+                onChange={(e) => setRkPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && rkPassword && handleRegenerateRecovery()}
+                placeholder="Підтвердьте паролем"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              />
+              <button
+                onClick={handleRegenerateRecovery}
+                disabled={!rkPassword || rkBusy}
+                className="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {rkBusy ? "Генерація..." : "Згенерувати новий ключ"}
+              </button>
+              {rkError && (
+                <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded-lg text-sm">
+                  {rkError}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {userId && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-4">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
               AI Категоризація
@@ -512,6 +678,78 @@ export default function SettingsPage() {
               {importResult.message}
             </div>
           )}
+        </div>
+      )}
+
+      {userId && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border-2 border-red-300 dark:border-red-800 p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-red-700 dark:text-red-400">
+            Видалення акаунта
+          </h2>
+
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 p-4 rounded-lg text-sm space-y-2">
+            <p className="font-semibold">⚠️ Увага: це серйозно і незворотно.</p>
+            <p>
+              Усі дані буде <strong>остаточно видалено</strong>: транзакції, рахунки,
+              категорії, ключ OpenAI, ваш профіль та сама зашифрована база разом з
+              усіма резервними копіями. Відновити їх <strong>неможливо</strong> —
+              ні паролем, ні ключем відновлення.
+            </p>
+            <p>
+              Після видалення додаток повернеться до першого запуску, і ви зможете
+              зареєструватися заново — вже без жодних попередніх даних.
+            </p>
+            <p className="text-xs">
+              Якщо хочете зберегти копію — спершу скористайтесь «Експортувати дані» вище.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Пароль
+              </span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={delPassword}
+                onChange={(e) => setDelPassword(e.target.value)}
+                placeholder="Ваш пароль для входу"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              />
+            </label>
+
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Для підтвердження введіть слово{" "}
+                <span className="font-mono font-semibold text-red-700 dark:text-red-400">
+                  {DELETE_CONFIRM_WORD}
+                </span>
+              </span>
+              <input
+                type="text"
+                value={delConfirm}
+                onChange={(e) => setDelConfirm(e.target.value)}
+                placeholder={DELETE_CONFIRM_WORD}
+                autoComplete="off"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              />
+            </label>
+
+            <button
+              onClick={handleDeleteAccount}
+              disabled={!canDelete}
+              className="px-6 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {delBusy ? "Видалення..." : "Видалити акаунт і всі дані назавжди"}
+            </button>
+
+            {delError && (
+              <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded-lg text-sm">
+                {delError}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

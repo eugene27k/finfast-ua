@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
-import { existsSync, renameSync, rmSync } from "node:fs";
+import { existsSync, renameSync, rmSync, readdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+import path from "node:path";
 import {
   generateDEK,
   dekToSqlcipherHex,
@@ -15,10 +16,11 @@ import {
   unlockWithRecovery,
   rewrapPassword,
   setRecovery,
+  deleteKeystore,
   InvalidCredentialsError,
 } from "./crypto";
 import { applyMigrations } from "@/lib/db/migrator";
-import { unlockVault } from "./vault";
+import { unlockVault, destroyVault } from "./vault";
 import { DB_PATH } from "@/lib/prisma";
 
 const ENC_TMP = `${DB_PATH}.enc`;
@@ -191,4 +193,60 @@ export function changePassword(
   const dek = unlockWithPassword(ks, email, oldPassword); // throws if wrong
   rewrapPassword(ks, email, newPassword, dek);
   writeKeystore(ks);
+}
+
+/** Issue a fresh recovery key (invalidates the previous one). Requires the password. */
+export function regenerateRecoveryKey(
+  emailRaw: string,
+  password: string
+): { recoveryKey: string } {
+  const ks = readKeystore();
+  if (!ks) throw new SetupError("NOT_SETUP");
+  const email = emailRaw.trim().toLowerCase();
+  const dek = unlockWithPassword(ks, email, password); // throws if wrong
+  const recoveryKey = generateRecoveryKey();
+  setRecovery(ks, recoveryKey, dek);
+  writeKeystore(ks);
+  return { recoveryKey };
+}
+
+/**
+ * Permanently and irreversibly delete the account: verify the password, seal
+ * the vault, then erase the encrypted database, every backup/sidecar file, and
+ * the keystore. Afterwards the installation is back to first-run state
+ * (`needsSetup()` is true again) so the user can register from scratch with no
+ * previous data — no transactions, no categories, no user.
+ *
+ * Requires the password (the unwrap is the check). The data is destroyed, not
+ * archived: there is no undo.
+ */
+export async function deleteAccount(
+  emailRaw: string,
+  password: string
+): Promise<void> {
+  const ks = readKeystore();
+  if (!ks) throw new SetupError("NOT_SETUP");
+  const email = emailRaw.trim().toLowerCase();
+  unlockWithPassword(ks, email, password); // throws InvalidCredentialsError if wrong
+
+  // Release the SQLite handle first — Windows locks an open DB file.
+  await destroyVault();
+
+  // Erase every on-disk artifact tied to this database: the live encrypted
+  // file, its WAL/SHM sidecars, the temp build file, and any plaintext
+  // backups (`dev.db.plaintext-bak`, `dev.db.SAFETY-*`, etc.).
+  const dir = path.dirname(DB_PATH);
+  const base = path.basename(DB_PATH); // "dev.db"
+  for (const name of readdirSync(dir)) {
+    const isDbArtifact =
+      name === base ||
+      name.startsWith(`${base}.`) || // backups / temp (dot-suffixed)
+      name.startsWith(`${base}-`); // WAL / SHM sidecars (hyphen-suffixed)
+    if (isDbArtifact) {
+      rmSync(path.join(dir, name), { force: true, maxRetries: 5, retryDelay: 100 });
+    }
+  }
+
+  // Finally drop the keystore so registration reopens.
+  deleteKeystore();
 }

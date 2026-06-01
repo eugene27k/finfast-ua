@@ -6,6 +6,8 @@ import { useData, type ManualAccountData, type ManualTransactionData, type Fetch
 import RefreshButton from "@/components/RefreshButton";
 import CategoryDropdown from "@/components/CategoryDropdown";
 import AiCategorizationPanel from "@/components/AiCategorizationPanel";
+import DateRangeFilter, { getDefaultRange, type DateRange } from "@/components/DateRangeFilter";
+import { useDbHistory } from "@/lib/useDbHistory";
 import { formatAmount, getCurrencyInfo } from "@/lib/currency";
 import { CATEGORY_NAMES, getEffectiveCategory, getCategoryColor } from "@/lib/mcc";
 import { useCurrencyRates } from "@/lib/hooks";
@@ -434,7 +436,7 @@ function TransactionsContent() {
   const {
     token, tokenReady, client, statements,
     statementsLoading, statementsError, progress,
-    refresh, lastRefreshedAt,
+    refresh, lastRefreshedAt, from: liveFrom,
     manualAccounts, refreshManualAccounts,
     overrides, customCategories,
   } = useData();
@@ -447,15 +449,10 @@ function TransactionsContent() {
   const [editingTx, setEditingTx] = useState<{ tx: ManualTransactionData; accountId: string } | null>(null);
   const [filterAccountId, setFilterAccountId] = useState<string>(initialAccount);
   const [filterSource, setFilterSource] = useState<"all" | "mono" | "manual">("all");
-  const [period, setPeriod] = useState(30);
+  const [range, setRange] = useState<DateRange>(getDefaultRange);
   const [search, setSearch] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showAiPanel, setShowAiPanel] = useState(false);
-
-  const periodFrom = useMemo(
-    () => Math.floor(Date.now() / 1000) - period * 24 * 60 * 60,
-    [period]
-  );
 
   useEffect(() => {
     if (tokenReady && !token) router.replace("/settings");
@@ -495,8 +492,27 @@ function TransactionsContent() {
     return map;
   }, [client]);
 
+  // Older portions of the range (beyond the ~30-day live window) come from the
+  // persisted DB history. Only the Monobank side needs this — manual transactions
+  // are always fully loaded.
+  const includeMono =
+    filterSource !== "manual" &&
+    (!filterAccountId || monoAccountMap.has(filterAccountId));
+  const needHistory = range.from < liveFrom;
+  const monoHistoryIds = useMemo(
+    () => (filterAccountId && monoAccountMap.has(filterAccountId) ? [filterAccountId] : []),
+    [filterAccountId, monoAccountMap]
+  );
+  const { history: monoHistory } = useDbHistory(
+    range.from,
+    range.to,
+    monoHistoryIds,
+    needHistory && includeMono
+  );
+
   const allTransactions = useMemo<UnifiedTx[]>(() => {
     const items: UnifiedTx[] = [];
+    const seenMono = new Set<string>();
 
     if (filterSource !== "manual") {
       for (const [accId, txList] of Object.entries(statements)) {
@@ -504,7 +520,8 @@ function TransactionsContent() {
         const accInfo = monoAccountMap.get(accId);
         if (!accInfo) continue;
         for (const tx of txList as MonobankStatement[]) {
-          if (tx.time < periodFrom) continue;
+          if (tx.time < range.from || tx.time > range.to) continue;
+          seenMono.add(tx.id);
           const cat = getEffectiveCategory(tx.mcc, tx.id, overrides);
           items.push({
             id: tx.id,
@@ -522,13 +539,38 @@ function TransactionsContent() {
           });
         }
       }
+
+      // Stored history fills the part of the range older than the live window.
+      if (needHistory && includeMono) {
+        for (const tx of monoHistory) {
+          if (seenMono.has(tx.id)) continue;
+          if (tx.time < range.from || tx.time > range.to) continue;
+          const accInfo = monoAccountMap.get(tx.accountId);
+          if (!accInfo) continue;
+          const cat = getEffectiveCategory(tx.mcc, tx.id, overrides);
+          items.push({
+            id: tx.id,
+            time: tx.time,
+            amount: tx.amount,
+            description: tx.description,
+            comment: tx.comment,
+            currencyCode: tx.currencyCode,
+            accountId: tx.accountId,
+            accountName: accInfo.name,
+            badgeText: cat.name,
+            badgeColor: cat.color,
+            mcc: tx.mcc,
+            source: "mono",
+          });
+        }
+      }
     }
 
     if (filterSource !== "mono") {
       for (const acc of manualAccounts) {
         if (filterAccountId && acc.id !== filterAccountId) continue;
         for (const tx of acc.transactions) {
-          if (tx.time < periodFrom) continue;
+          if (tx.time < range.from || tx.time > range.to) continue;
           items.push({
             id: tx.id,
             time: tx.time,
@@ -548,7 +590,7 @@ function TransactionsContent() {
 
     items.sort((a, b) => b.time - a.time);
     return items;
-  }, [statements, monoAccountMap, manualAccounts, filterAccountId, filterSource, periodFrom, overrides]);
+  }, [statements, monoAccountMap, manualAccounts, filterAccountId, filterSource, range.from, range.to, overrides, monoHistory, needHistory, includeMono]);
 
   const filtered = useMemo(() => {
     let result = allTransactions;
@@ -575,7 +617,7 @@ function TransactionsContent() {
     const result: { id: string; description: string; mcc: number; originalMcc: number; amount: number; counterName?: string; counterEdrpou?: string; comment?: string }[] = [];
     for (const [accId, txList] of Object.entries(statements)) {
       for (const tx of txList as MonobankStatement[]) {
-        if (tx.time < periodFrom) continue;
+        if (tx.time < range.from || tx.time > range.to) continue;
         if (overrides[tx.id]) continue;
         const cat = getEffectiveCategory(tx.mcc, tx.id, overrides);
         if (cat.name !== "Інше") continue;
@@ -593,7 +635,7 @@ function TransactionsContent() {
       }
     }
     return result;
-  }, [statements, periodFrom, overrides]);
+  }, [statements, range.from, range.to, overrides]);
 
   const totalIncome = filtered
     .filter((i) => i.amount > 0)
@@ -704,7 +746,7 @@ function TransactionsContent() {
         />
       )}
 
-      {/* Filters row 1: source, account, period, search */}
+      {/* Filters row 1: source, account, date range, search */}
       <div className="flex flex-wrap gap-3 items-center">
         <select
           value={filterSource}
@@ -742,25 +784,7 @@ function TransactionsContent() {
           )}
         </select>
 
-        <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-          {[
-            { label: "7 днів", value: 7 },
-            { label: "14 днів", value: 14 },
-            { label: "30 днів", value: 30 },
-          ].map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setPeriod(p.value)}
-              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                period === p.value
-                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
-                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <DateRangeFilter onChange={setRange} />
 
         <input
           type="text"
