@@ -29,7 +29,7 @@ export default function AnalyticsPage() {
   const router = useRouter();
 
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
-  const [hideEmpty, setHideEmpty] = useState(false);
+  const [hideInactive, setHideInactive] = useState(true);
   const [range, setRange] = useState<DateRange>(getDefaultRange);
 
   const currencyCode = client?.accounts[0]?.currencyCode || 980;
@@ -94,8 +94,8 @@ export default function AnalyticsPage() {
             accounts={client.accounts}
             selectedIds={selectedAccounts}
             onSelectionChange={setSelectedAccounts}
-            hideEmpty={hideEmpty}
-            onHideEmptyChange={setHideEmpty}
+            hideInactive={hideInactive}
+            onHideInactiveChange={setHideInactive}
           />
         )}
         <div className="flex items-center gap-2">

@@ -7,16 +7,16 @@ import { useCurrencyRates } from "@/lib/hooks";
 import AccountCard from "@/components/AccountCard";
 import BudgetAlertBanner from "@/components/BudgetAlertBanner";
 import { getCurrencyInfo, formatAmount } from "@/lib/currency";
-import { sortAccounts } from "@/lib/accounts";
+import { sortAccounts, filterInactiveAccounts } from "@/lib/accounts";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function DashboardPage() {
-  const { token, tokenReady, client, clientLoading: loading, clientError: error, getFiltered, overrides } = useData();
+  const { token, tokenReady, client, clientLoading: loading, clientError: error, getFiltered, overrides, activeAccountIds } = useData();
   const { data: rates } = useCurrencyRates();
   const { budgets } = useBudgets();
   const router = useRouter();
-  const [hideEmpty, setHideEmpty] = useState(false);
+  const [hideInactive, setHideInactive] = useState(true);
 
   const now = new Date();
   const monthStart = useMemo(
@@ -62,8 +62,8 @@ export default function DashboardPage() {
   const uahAccounts = allSorted.filter((a) => a.currencyCode === 980);
   const foreignAccounts = allSorted.filter((a) => a.currencyCode !== 980);
 
-  const visibleUah = hideEmpty ? uahAccounts.filter((a) => a.balance !== 0) : uahAccounts;
-  const visibleForeign = hideEmpty ? foreignAccounts.filter((a) => a.balance !== 0) : foreignAccounts;
+  const visibleUah = filterInactiveAccounts(uahAccounts, activeAccountIds, hideInactive);
+  const visibleForeign = filterInactiveAccounts(foreignAccounts, activeAccountIds, hideInactive);
 
   const totalUah = uahAccounts.reduce((sum, a) => sum + a.balance, 0);
   const totalOwn = uahAccounts.reduce(
@@ -162,15 +162,25 @@ export default function DashboardPage() {
 
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Рахунки</h2>
-        <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={hideEmpty}
-            onChange={(e) => setHideEmpty(e.target.checked)}
-            className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
-          />
-          Приховати пусті рахунки
-        </label>
+        <div className="flex items-center gap-1.5">
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={hideInactive}
+              onChange={(e) => setHideInactive(e.target.checked)}
+              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+            />
+            Приховати неактивні рахунки
+          </label>
+          <span className="relative group flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-gray-400 cursor-help">
+              <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a.75.75 0 1 1-1.061-1.061 .75.75 0 0 1 1.06 1.06ZM10 15a1 1 0 0 1-1-1v-4a1 1 0 1 1 2 0v4a1 1 0 0 1-1 1Z" clipRule="evenodd" />
+            </svg>
+            <span className="invisible group-hover:visible absolute right-0 top-6 w-64 bg-gray-800 dark:bg-gray-700 text-white text-[11px] leading-tight rounded-lg px-3 py-2 z-50 shadow-lg">
+              Неактивні — рахунки, на яких одночасно немає коштів і немає рухів (транзакцій) за останні 60 днів.
+            </span>
+          </span>
+        </div>
       </div>
 
       {visibleUah.length > 0 && (

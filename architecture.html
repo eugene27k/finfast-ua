@@ -456,7 +456,7 @@
      Цей блок переписується кожного разу при генерації. -->
 <script id="arch-data" type="application/json">
 {
-  "generatedAt": "2026-05-31T23:53:36.836Z",
+  "generatedAt": "2026-06-01T10:39:38.508Z",
   "cols": {
     "ui": {
       "x": 8,
@@ -630,6 +630,20 @@
       "module": "m-auth"
     },
     {
+      "id": "api-auth-delete-account",
+      "group": "api",
+      "kind": "api",
+      "name": "POST /api/auth/delete-account",
+      "sub": "POST",
+      "path": "src/app/api/auth/delete-account/route.ts",
+      "url": "/api/auth/delete-account",
+      "methods": [
+        "POST"
+      ],
+      "col": "api",
+      "y": 1120
+    },
+    {
       "id": "api-auth-login",
       "group": "api",
       "kind": "api",
@@ -641,7 +655,7 @@
         "POST"
       ],
       "col": "api",
-      "y": 1120,
+      "y": 1200,
       "module": "m-auth"
     },
     {
@@ -656,7 +670,7 @@
         "POST"
       ],
       "col": "api",
-      "y": 1200,
+      "y": 1280,
       "module": "m-auth"
     },
     {
@@ -686,8 +700,22 @@
         "POST"
       ],
       "col": "api",
-      "y": 1280,
+      "y": 1360,
       "module": "m-auth"
+    },
+    {
+      "id": "api-auth-recovery-key",
+      "group": "api",
+      "kind": "api",
+      "name": "POST /api/auth/recovery-key",
+      "sub": "POST",
+      "path": "src/app/api/auth/recovery-key/route.ts",
+      "url": "/api/auth/recovery-key",
+      "methods": [
+        "POST"
+      ],
+      "col": "api",
+      "y": 1440
     },
     {
       "id": "api-auth-setup",
@@ -701,7 +729,7 @@
         "POST"
       ],
       "col": "api",
-      "y": 1360,
+      "y": 1520,
       "module": "m-auth"
     },
     {
@@ -763,7 +791,7 @@
         "POST"
       ],
       "col": "api",
-      "y": 1440,
+      "y": 1600,
       "module": "m-io"
     },
     {
@@ -798,7 +826,7 @@
         "PUT"
       ],
       "col": "api",
-      "y": 1760,
+      "y": 1920,
       "module": "m-net"
     },
     {
@@ -858,7 +886,7 @@
         "POST"
       ],
       "col": "api",
-      "y": 1520,
+      "y": 1680,
       "module": "m-sync"
     },
     {
@@ -889,7 +917,7 @@
         "POST"
       ],
       "col": "api",
-      "y": 1600,
+      "y": 1760,
       "module": "m-sync"
     },
     {
@@ -935,7 +963,7 @@
         "POST"
       ],
       "col": "api",
-      "y": 1680,
+      "y": 1840,
       "module": "m-auth"
     },
     {
@@ -990,7 +1018,7 @@
       "sub": "доступ до зашифрованого vault, тримає ключ у пам'яті",
       "path": "src/lib/auth/vault.ts",
       "col": "lib",
-      "y": 1200,
+      "y": 1280,
       "module": "m-vault"
     },
     {
@@ -1093,6 +1121,16 @@
       "module": "m-sync"
     },
     {
+      "id": "lib-usedbhistory",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/useDbHistory.ts",
+      "sub": "",
+      "path": "src/lib/useDbHistory.ts",
+      "col": "lib",
+      "y": 1120
+    },
+    {
       "id": "lib-usemonthcomparison",
       "group": "lib",
       "kind": "lib",
@@ -1100,7 +1138,7 @@
       "sub": "порівняння витрат поточного vs минулого місяця",
       "path": "src/lib/useMonthComparison.ts",
       "col": "lib",
-      "y": 1120,
+      "y": 1200,
       "module": "m-anal"
     },
     {
@@ -1191,6 +1229,16 @@
       "module": "m-sync"
     },
     {
+      "id": "comp-daterangefilter",
+      "group": "comp",
+      "kind": "comp",
+      "name": "DateRangeFilter",
+      "sub": "",
+      "path": "src/components/DateRangeFilter.tsx",
+      "col": "comp",
+      "y": 720
+    },
+    {
       "id": "comp-monthcomparison",
       "group": "comp",
       "kind": "comp",
@@ -1198,7 +1246,7 @@
       "sub": "поточний місяць vs попередній",
       "path": "src/components/MonthComparison.tsx",
       "col": "comp",
-      "y": 720,
+      "y": 800,
       "module": "m-anal"
     },
     {
@@ -1209,7 +1257,7 @@
       "sub": "ручний тригер синхронізації · cooldown 5хв",
       "path": "src/components/RefreshButton.tsx",
       "col": "comp",
-      "y": 800,
+      "y": 880,
       "module": "m-sync"
     },
     {
@@ -1220,7 +1268,7 @@
       "sub": "лівий навігаційний сайдбар",
       "path": "src/components/Sidebar.tsx",
       "col": "comp",
-      "y": 880
+      "y": 960
     },
     {
       "id": "comp-spendingchart",
@@ -1230,7 +1278,7 @@
       "sub": "pie chart витрат по категоріях",
       "path": "src/components/SpendingChart.tsx",
       "col": "comp",
-      "y": 960,
+      "y": 1040,
       "module": "m-anal"
     },
     {
@@ -1241,7 +1289,7 @@
       "sub": "dark / light mode",
       "path": "src/components/ThemeProvider.tsx",
       "col": "comp",
-      "y": 1040
+      "y": 1120
     },
     {
       "id": "comp-toast",
@@ -1251,7 +1299,7 @@
       "sub": "спливаючі повідомлення",
       "path": "src/components/Toast.tsx",
       "col": "comp",
-      "y": 1120
+      "y": 1200
     },
     {
       "id": "db-sqlite",
@@ -1316,6 +1364,14 @@
     {
       "from": "page-net-worth",
       "to": "api-manual-transactions"
+    },
+    {
+      "from": "page-settings",
+      "to": "api-auth-delete-account"
+    },
+    {
+      "from": "page-settings",
+      "to": "api-auth-recovery-key"
     },
     {
       "from": "page-settings",
@@ -1388,6 +1444,10 @@
     {
       "from": "lib-hooks",
       "to": "api-monobank-currency"
+    },
+    {
+      "from": "lib-usedbhistory",
+      "to": "api-transactions-history"
     },
     {
       "from": "lib-usemonthcomparison",
@@ -1543,6 +1603,10 @@
     },
     {
       "from": "page-analytics",
+      "to": "lib-usedbhistory"
+    },
+    {
+      "from": "page-analytics",
       "to": "lib-mcc"
     },
     {
@@ -1595,6 +1659,10 @@
     },
     {
       "from": "page-transactions-new",
+      "to": "lib-usedbhistory"
+    },
+    {
+      "from": "page-transactions-new",
       "to": "lib-currency"
     },
     {
@@ -1627,6 +1695,10 @@
     },
     {
       "from": "comp-refreshbutton",
+      "to": "page-analytics"
+    },
+    {
+      "from": "comp-daterangefilter",
       "to": "page-analytics"
     },
     {
@@ -1683,6 +1755,10 @@
     },
     {
       "from": "comp-aicategorizationpanel",
+      "to": "page-transactions-new"
+    },
+    {
+      "from": "comp-daterangefilter",
       "to": "page-transactions-new"
     },
     {

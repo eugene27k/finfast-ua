@@ -25,7 +25,7 @@ export default function BudgetsPage() {
   const router = useRouter();
 
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
-  const [hideEmpty, setHideEmpty] = useState(false);
+  const [hideInactive, setHideInactive] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editCategory, setEditCategory] = useState<string | null>(null);
   const [formCategory, setFormCategory] = useState("");
@@ -119,8 +119,8 @@ export default function BudgetsPage() {
           accounts={client.accounts}
           selectedIds={selectedAccounts}
           onSelectionChange={setSelectedAccounts}
-          hideEmpty={hideEmpty}
-          onHideEmptyChange={setHideEmpty}
+          hideInactive={hideInactive}
+          onHideInactiveChange={setHideInactive}
         />
       )}
 

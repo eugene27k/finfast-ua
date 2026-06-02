@@ -19,10 +19,30 @@ export function sortAccounts(accounts: MonobankAccount[]): MonobankAccount[] {
   });
 }
 
-export function filterEmptyAccounts(
+/**
+ * Days of inactivity after which a zero-balance account is treated as
+ * "inactive" (and hidden by default). An account counts as active if it has at
+ * least one transaction within this window.
+ */
+export const ACTIVITY_WINDOW_DAYS = 60;
+
+/**
+ * An account is "inactive" when it holds no money AND has had no movement in
+ * the recent window — see {@link ACTIVITY_WINDOW_DAYS}. `activeAccountIds` is
+ * the set of account ids that have at least one transaction within that window.
+ */
+export function isAccountInactive(
+  account: MonobankAccount,
+  activeAccountIds: Set<string>
+): boolean {
+  return account.balance === 0 && !activeAccountIds.has(account.id);
+}
+
+export function filterInactiveAccounts(
   accounts: MonobankAccount[],
-  hideEmpty: boolean
+  activeAccountIds: Set<string>,
+  hideInactive: boolean
 ): MonobankAccount[] {
-  if (!hideEmpty) return accounts;
-  return accounts.filter((a) => a.balance !== 0);
+  if (!hideInactive) return accounts;
+  return accounts.filter((a) => !isAccountInactive(a, activeAccountIds));
 }

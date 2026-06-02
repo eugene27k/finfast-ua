@@ -3,7 +3,8 @@
 import { useState } from "react";
 import type { MonobankAccount } from "@/types/monobank";
 import { getCurrencyInfo } from "@/lib/currency";
-import { sortAccounts } from "@/lib/accounts";
+import { sortAccounts, filterInactiveAccounts } from "@/lib/accounts";
+import { useData } from "@/components/DataProvider";
 
 const TYPE_LABELS: Record<string, string> = {
   black: "Чорна",
@@ -19,22 +20,23 @@ interface AccountFilterProps {
   accounts: MonobankAccount[];
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
-  hideEmpty: boolean;
-  onHideEmptyChange: (v: boolean) => void;
-  showHideEmpty?: boolean;
+  hideInactive: boolean;
+  onHideInactiveChange: (v: boolean) => void;
+  showHideInactive?: boolean;
 }
 
 export default function AccountFilter({
   accounts,
   selectedIds,
   onSelectionChange,
-  hideEmpty,
-  onHideEmptyChange,
-  showHideEmpty = true,
+  hideInactive,
+  onHideInactiveChange,
+  showHideInactive = true,
 }: AccountFilterProps) {
+  const { activeAccountIds } = useData();
   const [collapsed, setCollapsed] = useState(false);
   const sorted = sortAccounts(accounts);
-  const displayed = hideEmpty ? sorted.filter((a) => a.balance !== 0) : sorted;
+  const displayed = filterInactiveAccounts(sorted, activeAccountIds, hideInactive);
 
   const allSelected = selectedIds.length === 0;
 
@@ -69,16 +71,26 @@ export default function AccountFilter({
           </svg>
           Рахунки
         </button>
-        {showHideEmpty && (
-          <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={hideEmpty}
-              onChange={(e) => onHideEmptyChange(e.target.checked)}
-              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
-            />
-            Приховати пусті
-          </label>
+        {showHideInactive && (
+          <div className="flex items-center gap-1.5">
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={hideInactive}
+                onChange={(e) => onHideInactiveChange(e.target.checked)}
+                className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+              />
+              Приховати неактивні
+            </label>
+            <span className="relative group flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-gray-400 cursor-help">
+                <path fillRule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM8.94 6.94a.75.75 0 1 1-1.061-1.061 .75.75 0 0 1 1.06 1.06ZM10 15a1 1 0 0 1-1-1v-4a1 1 0 1 1 2 0v4a1 1 0 0 1-1 1Z" clipRule="evenodd" />
+              </svg>
+              <span className="invisible group-hover:visible absolute right-0 top-6 w-64 bg-gray-800 dark:bg-gray-700 text-white text-[11px] leading-tight rounded-lg px-3 py-2 z-50 shadow-lg">
+                Неактивні — рахунки, на яких одночасно немає коштів і немає рухів (транзакцій) за останні 60 днів.
+              </span>
+            </span>
+          </div>
         )}
       </div>
 

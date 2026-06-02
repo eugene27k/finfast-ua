@@ -13,6 +13,7 @@ import type {
   MonobankStatement,
   MonobankAccount,
 } from "@/types/monobank";
+import { ACTIVITY_WINDOW_DAYS } from "@/lib/accounts";
 
 export interface CustomCategoryData {
   id: string;
@@ -107,6 +108,8 @@ interface DataContextValue {
   from: number;
   refresh: () => void;
   getFiltered: (selectedIds: string[]) => MonobankStatement[];
+  /** Account ids with at least one transaction in the last ACTIVITY_WINDOW_DAYS. */
+  activeAccountIds: Set<string>;
   lastRefreshedAt: Date | null;
   userId: string | null;
   customCategories: CustomCategoryData[];
@@ -394,6 +397,54 @@ export default function DataProvider({
     [statements, idsKey]
   );
 
+  // --- Active accounts (movement within the last ACTIVITY_WINDOW_DAYS) ---
+  // Live statements only reach back ~30 days, so the older part of the window
+  // is filled from persisted history in the DB. The union of both decides
+  // which accounts count as "active" (i.e. not hidden as inactive).
+  const activeFrom = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ACTIVITY_WINDOW_DAYS);
+    return Math.floor(d.getTime() / 1000);
+  }, []);
+
+  const [historyActiveIds, setHistoryActiveIds] = useState<Set<string>>(
+    new Set()
+  );
+
+  useEffect(() => {
+    if (!userId) return;
+    const now = Math.floor(Date.now() / 1000);
+    const params = new URLSearchParams({
+      userId,
+      from: String(activeFrom),
+      to: String(now),
+    });
+    let cancelled = false;
+    fetch(`/api/transactions/history?${params}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: Array<{ accountId?: string }>) => {
+        if (cancelled || !Array.isArray(rows)) return;
+        const ids = new Set<string>();
+        for (const row of rows) {
+          if (row.accountId) ids.add(row.accountId);
+        }
+        setHistoryActiveIds(ids);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, activeFrom, lastRefreshedAt]);
+
+  const activeAccountIds = useMemo(() => {
+    const ids = new Set(historyActiveIds);
+    for (const [accId, txs] of Object.entries(statements)) {
+      if (txs.some((tx) => tx.time >= activeFrom)) ids.add(accId);
+    }
+    return ids;
+  }, [historyActiveIds, statements, activeFrom]);
+
   const value = useMemo<DataContextValue>(
     () => ({
       token,
@@ -411,6 +462,7 @@ export default function DataProvider({
       from,
       refresh,
       getFiltered,
+      activeAccountIds,
       lastRefreshedAt,
       userId,
       customCategories,
@@ -437,6 +489,7 @@ export default function DataProvider({
       from,
       refresh,
       getFiltered,
+      activeAccountIds,
       lastRefreshedAt,
       userId,
       customCategories,

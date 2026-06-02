@@ -23,19 +23,18 @@ if errorlevel 1 (
 )
 echo.
 
-echo [3/4] Generating Prisma client & syncing DB schema...
+echo [3/4] Generating Prisma client...
 call npx prisma generate
 if errorlevel 1 (
     echo ERROR: prisma generate failed!
     pause
     exit /b 1
 )
-call npx prisma db push
-if errorlevel 1 (
-    echo ERROR: prisma db push failed!
-    pause
-    exit /b 1
-)
+REM NOTE: no "prisma db push" / "prisma migrate" here. dev.db is SQLCipher-
+REM encrypted, so the Prisma CLI cannot open it (it errors with "not a database
+REM file"). The app owns the schema: the first-run /setup flow creates and
+REM migrates the encrypted DB, and the runtime migrator applies any pending
+REM migrations through a keyed connection on startup.
 echo.
 
 echo [4/4] Starting dev server...
