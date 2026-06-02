@@ -462,7 +462,7 @@ function TransactionsContent() {
   const {
     token, tokenReady, client, statements,
     statementsLoading, statementsError, progress,
-    refresh, lastRefreshedAt, from: liveFrom,
+    refresh, lastRefreshedAt,
     manualAccounts, refreshManualAccounts,
     overrides, customCategories,
     getTransferInfo, transferDecisions,
@@ -526,16 +526,19 @@ function TransactionsContent() {
   const includeMono =
     filterSource !== "manual" &&
     (!filterAccountId || monoAccountMap.has(filterAccountId));
-  const needHistory = range.from < liveFrom;
   const monoHistoryIds = useMemo(
     () => (filterAccountId && monoAccountMap.has(filterAccountId) ? [filterAccountId] : []),
     [filterAccountId, monoAccountMap]
   );
+  // Always merge persisted DB history with the live statements. Live data covers
+  // only the last ~30 days AND can be incomplete when Monobank rate-limits the
+  // fetch, so the DB (the durable store) is the reliable source for any range.
+  // De-duplication by id below lets live data win for transactions in both.
   const { history: monoHistory } = useDbHistory(
     range.from,
     range.to,
     monoHistoryIds,
-    needHistory && includeMono
+    includeMono
   );
 
   const allTransactions = useMemo<UnifiedTx[]>(() => {
@@ -568,8 +571,9 @@ function TransactionsContent() {
         }
       }
 
-      // Stored history fills the part of the range older than the live window.
-      if (needHistory && includeMono) {
+      // Stored DB history fills any transactions the live fetch is missing
+      // (older than ~30 days, or not yet loaded due to Monobank rate limits).
+      if (includeMono) {
         for (const tx of monoHistory) {
           if (seenMono.has(tx.id)) continue;
           if (tx.time < range.from || tx.time > range.to) continue;
@@ -618,7 +622,7 @@ function TransactionsContent() {
 
     items.sort((a, b) => b.time - a.time);
     return items;
-  }, [statements, monoAccountMap, manualAccounts, filterAccountId, filterSource, range.from, range.to, overrides, monoHistory, needHistory, includeMono]);
+  }, [statements, monoAccountMap, manualAccounts, filterAccountId, filterSource, range.from, range.to, overrides, monoHistory, includeMono]);
 
   // Effective internal-transfer mark for every listed transaction.
   const transferInfo = useMemo(

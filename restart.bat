@@ -42,6 +42,12 @@ echo.
 echo Close this window to stop the server.
 echo.
 
+REM Stop any dev server still holding port 3000 so we never end up with a stale
+REM "ghost" server (the browser would otherwise open a dead/old instance).
+echo Stopping any previous dev server on port 3000...
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -Expand OwningProcess -Unique | ForEach-Object { taskkill /F /T /PID $_ 2>&1 | Out-Null }"
+echo.
+
 REM Wait for server to be ready, then open browser
 start "" powershell -WindowStyle Hidden -Command "do { Start-Sleep -Seconds 2; try { $r = Invoke-WebRequest -Uri http://localhost:3000 -UseBasicParsing -TimeoutSec 2 -ErrorAction SilentlyContinue } catch { $r = $null } } while (-not $r); Start-Process 'http://localhost:3000/dashboard'"
 

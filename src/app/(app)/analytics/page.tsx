@@ -22,7 +22,6 @@ export default function AnalyticsPage() {
     statementsLoading: loading,
     refresh,
     getFiltered,
-    from: liveFrom,
     lastRefreshedAt,
     overrides,
     getTransferInfo,
@@ -35,27 +34,27 @@ export default function AnalyticsPage() {
 
   const currencyCode = client?.accounts[0]?.currencyCode || 980;
 
-  // Older portions of the range come from persisted DB history (live data is ~30 days).
-  const needHistory = range.from < liveFrom;
+  // Always merge persisted DB history with live data. Live statements cover only
+  // the last ~30 days and can be incomplete when Monobank rate-limits the fetch,
+  // so the DB is the reliable source for any range. De-dup by id (live wins).
   const { history, loading: historyLoading } = useDbHistory(
     range.from,
     range.to,
     selectedAccounts,
-    needHistory
+    true
   );
 
   const transactions = useMemo(() => {
     const live = getFiltered(selectedAccounts).filter(
       (tx) => tx.time >= range.from && tx.time <= range.to
     );
-    if (!needHistory) return live;
     // Merge in stored history, de-duplicating by transaction id.
     const seen = new Set(live.map((tx) => tx.id));
     const extra = history.filter(
       (tx) => !seen.has(tx.id) && tx.time >= range.from && tx.time <= range.to
     );
     return [...live, ...extra].sort((a, b) => b.time - a.time);
-  }, [getFiltered, selectedAccounts, range.from, range.to, needHistory, history]);
+  }, [getFiltered, selectedAccounts, range.from, range.to, history]);
 
   // Internal movements (jar/own-card transfers) are never income or expense, so
   // they are excluded from every analytic view.
