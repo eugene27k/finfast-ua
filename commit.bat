@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 cd /d E:\Github\finfast-ua
 
 set BRANCH=claude/monobank-finances-app-FO9hQ
@@ -25,10 +24,10 @@ if errorlevel 1 (
 )
 
 REM --- Ask for a commit message ---
-echo Describe the changes (or just press Enter for an automatic note):
+echo Describe the changes ^(or just press Enter for an automatic note^):
 set "MSG="
 set /p "MSG=> "
-if "%MSG%"=="" set "MSG=Оновлення %DATE% %TIME%"
+if "%MSG%"=="" set "MSG=Update %DATE% %TIME%"
 echo.
 
 echo [2/5] Staging all changes...
@@ -83,8 +82,7 @@ echo   PROBLEM during: %STEP%
 echo ============================================
 echo.
 echo Nothing was lost. If this mentions a CONFLICT,
-echo just write to Claude in chat:
-echo     "pull conflict, розрули будь ласка"
+echo just write to Claude in chat: "pull conflict, rozruly"
 echo.
 echo Current state:
 git status --short
