@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useData } from "@/components/DataProvider";
 import { getMccCategory, getCategoryColor } from "@/lib/mcc";
 
@@ -29,11 +30,16 @@ export default function CategoryDropdown({
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(PRESET_COLORS[0]);
   const [saving, setSaving] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      if (
+        buttonRef.current && !buttonRef.current.contains(e.target as Node) &&
+        dropdownRef.current && !dropdownRef.current.contains(e.target as Node)
+      ) {
         setOpen(false);
         setCreating(false);
       }
@@ -41,6 +47,15 @@ export default function CategoryDropdown({
     if (open) document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setOpen(!open);
+  };
 
   const handleSelect = async (categoryId: string | null) => {
     if (!userId) return;
@@ -88,9 +103,10 @@ export default function CategoryDropdown({
   const monoColor = getCategoryColor(monoCategory);
 
   return (
-    <div className="relative inline-block" ref={ref}>
+    <div className="relative inline-block">
       <button
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        ref={buttonRef}
+        onClick={handleToggle}
         className="text-[11px] px-1.5 py-0.5 rounded inline-flex items-center gap-1 hover:opacity-80 transition-opacity"
         style={{ backgroundColor: `${currentColor}20`, color: currentColor }}
         title="Змінити категорію"
@@ -103,8 +119,12 @@ export default function CategoryDropdown({
         </svg>
       </button>
 
-      {open && (
-        <div className="absolute left-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50 overflow-hidden">
+      {open && typeof document !== "undefined" && createPortal(
+        <div
+          ref={dropdownRef}
+          className="fixed w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-[9999] overflow-hidden"
+          style={{ top: dropdownPos.top, left: dropdownPos.left }}
+        >
           {saving && (
             <div className="absolute inset-0 bg-white/70 dark:bg-gray-800/70 flex items-center justify-center z-10">
               <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -218,7 +238,8 @@ export default function CategoryDropdown({
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

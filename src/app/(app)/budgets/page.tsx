@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useData } from "@/components/DataProvider";
 import { useBudgets, getBudgetStatuses } from "@/lib/budgets";
-import { CATEGORY_NAMES } from "@/lib/mcc";
+import { CATEGORY_NAMES, getCategoryColor } from "@/lib/mcc";
 import { getCurrencyInfo } from "@/lib/currency";
 import BudgetProgressCard from "@/components/BudgetProgressCard";
 import AccountFilter from "@/components/AccountFilter";
@@ -20,6 +20,8 @@ export default function BudgetsPage() {
     getFiltered,
     lastRefreshedAt,
     overrides,
+    customCategories,
+    getTransferInfo,
   } = useData();
   const { budgets, ready: budgetsReady, setBudget, removeBudget } = useBudgets();
   const router = useRouter();
@@ -46,17 +48,28 @@ export default function BudgetsPage() {
 
   const transactions = useMemo(() => {
     const all = getFiltered(selectedAccounts);
-    return all.filter((tx) => tx.time >= monthStart);
-  }, [getFiltered, selectedAccounts, monthStart]);
+    const inMonth = all.filter((tx) => tx.time >= monthStart);
+    // Internal movements (jar / own-card transfers) are not spending.
+    const info = getTransferInfo(inMonth);
+    return inMonth.filter((tx) => !info.get(tx.id)?.internal);
+  }, [getFiltered, selectedAccounts, monthStart, getTransferInfo]);
 
   const statuses = useMemo(
     () => getBudgetStatuses(budgets, transactions, overrides),
     [budgets, transactions, overrides]
   );
 
-  const availableCategories = CATEGORY_NAMES.filter(
+  const allCategoryNames = useMemo(
+    () => Array.from(new Set([...CATEGORY_NAMES, ...customCategories.map((c) => c.name)])),
+    [customCategories]
+  );
+
+  const availableCategories = allCategoryNames.filter(
     (name) => !(name in budgets) || name === editCategory
   );
+
+  const resolveCategoryColor = (name: string) =>
+    customCategories.find((c) => c.name === name)?.color ?? getCategoryColor(name);
 
   const openAddForm = () => {
     setEditCategory(null);
@@ -195,6 +208,7 @@ export default function BudgetsPage() {
               key={s.category}
               status={s}
               currencyCode={currencyCode}
+              color={resolveCategoryColor(s.category)}
               onEdit={() => openEditForm(s.category)}
               onDelete={() => handleDelete(s.category)}
             />

@@ -7,6 +7,7 @@ import { formatAmount } from "@/lib/currency";
 interface BudgetProgressCardProps {
   status: BudgetStatus;
   currencyCode: number;
+  color?: string;
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -14,10 +15,11 @@ interface BudgetProgressCardProps {
 export default function BudgetProgressCard({
   status,
   currencyCode,
+  color,
   onEdit,
   onDelete,
 }: BudgetProgressCardProps) {
-  const categoryColor = getCategoryColor(status.category);
+  const categoryColor = color ?? getCategoryColor(status.category);
   const barColor =
     status.status === "exceeded"
       ? "#ef4444"

@@ -52,7 +52,7 @@ function aggregateByCategory(
 export function useMonthComparison(
   selectedAccounts: string[]
 ): MonthComparisonData {
-  const { userId, token, client, getFiltered, overrides } = useData();
+  const { userId, token, client, getFiltered, overrides, getTransferInfo } = useData();
 
   const [previousMonth, setPreviousMonth] = useState<CategoryTotal[]>([]);
   const [loading, setLoading] = useState(false);
@@ -71,14 +71,16 @@ export function useMonthComparison(
     [now.getMonth(), now.getFullYear()]
   );
 
-  // Current month: from already-loaded statements
+  // Current month: from already-loaded statements (internal transfers excluded)
   const currentMonth = useMemo(() => {
     const all = getFiltered(selectedAccounts);
     const filtered = all.filter(
       (tx) => tx.time >= currentRange.from && tx.time <= currentRange.to
     );
-    return aggregateByCategory(filtered, overrides);
-  }, [getFiltered, selectedAccounts, currentRange, overrides]);
+    const info = getTransferInfo(filtered);
+    const spendable = filtered.filter((tx) => !info.get(tx.id)?.internal);
+    return aggregateByCategory(spendable, overrides);
+  }, [getFiltered, selectedAccounts, currentRange, overrides, getTransferInfo]);
 
   const accountIds = useMemo(
     () => client?.accounts.map((a) => a.id) || [],
@@ -145,7 +147,9 @@ export function useMonthComparison(
         }
 
         if (!cancelled) {
-          setPreviousMonth(aggregateByCategory(data, overrides));
+          const info = getTransferInfo(data);
+          const spendable = data.filter((tx) => !info.get(tx.id)?.internal);
+          setPreviousMonth(aggregateByCategory(spendable, overrides));
         }
       } catch (e) {
         if (!cancelled) {
@@ -159,7 +163,7 @@ export function useMonthComparison(
     fetchPrevMonth();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, prevRange.from, prevRange.to, accountIdsKey, overrides, doBackfill]);
+  }, [userId, prevRange.from, prevRange.to, accountIdsKey, overrides, doBackfill, getTransferInfo]);
 
   return { currentMonth, previousMonth, loading, backfilling, error };
 }

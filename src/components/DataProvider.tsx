@@ -14,6 +14,12 @@ import type {
   MonobankAccount,
 } from "@/types/monobank";
 import { ACTIVITY_WINDOW_DAYS } from "@/lib/accounts";
+import {
+  buildTransferInfo,
+  type TransferInput,
+  type TransferMark,
+  type TransferDecision,
+} from "@/lib/transfers";
 
 export interface CustomCategoryData {
   id: string;
@@ -114,6 +120,12 @@ interface DataContextValue {
   userId: string | null;
   customCategories: CustomCategoryData[];
   overrides: Record<string, OverrideInfo>;
+  /** Per-transaction internal-transfer decisions set by the user. */
+  transferDecisions: Record<string, TransferDecision>;
+  /** Titles of the user's own Monobank jars (for transfer auto-detection). */
+  jarTitles: string[];
+  /** Effective internal-transfer mark for each given transaction. */
+  getTransferInfo: (txns: TransferInput[]) => Map<string, TransferMark>;
   refreshCategories: () => void;
   refreshOverrides: () => void;
   manualAccounts: ManualAccountData[];
@@ -195,8 +207,11 @@ export default function DataProvider({
     refreshCategories();
   }, [refreshCategories]);
 
-  // --- Transaction overrides ---
+  // --- Transaction overrides (categories + internal-transfer decisions) ---
   const [overrides, setOverrides] = useState<Record<string, OverrideInfo>>({});
+  const [transferDecisions, setTransferDecisions] = useState<
+    Record<string, TransferDecision>
+  >({});
 
   const refreshOverrides = useCallback(() => {
     if (!userId) return;
@@ -204,6 +219,7 @@ export default function DataProvider({
       .then((r) => r.json())
       .then((data) => {
         if (data.overrides) setOverrides(data.overrides);
+        setTransferDecisions(data.transfers || {});
       })
       .catch(() => {});
   }, [userId]);
@@ -445,6 +461,22 @@ export default function DataProvider({
     return ids;
   }, [historyActiveIds, statements, activeFrom]);
 
+  // --- Internal-transfer detection ---
+  const jarTitles = useMemo(
+    () => (client?.jars || []).map((j) => j.title),
+    [client]
+  );
+  const transferDecisionsKey = useMemo(
+    () => JSON.stringify(transferDecisions),
+    [transferDecisions]
+  );
+  const getTransferInfo = useCallback(
+    (txns: TransferInput[]) =>
+      buildTransferInfo(txns, jarTitles, transferDecisions),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [jarTitles, transferDecisionsKey]
+  );
+
   const value = useMemo<DataContextValue>(
     () => ({
       token,
@@ -467,6 +499,9 @@ export default function DataProvider({
       userId,
       customCategories,
       overrides,
+      transferDecisions,
+      jarTitles,
+      getTransferInfo,
       refreshCategories,
       refreshOverrides,
       manualAccounts,
@@ -494,6 +529,9 @@ export default function DataProvider({
       userId,
       customCategories,
       overrides,
+      transferDecisions,
+      jarTitles,
+      getTransferInfo,
       refreshCategories,
       refreshOverrides,
       manualAccounts,

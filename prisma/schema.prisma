@@ -66,6 +66,10 @@ model TransactionOverride {
   userId           String
   transactionId    String
   customCategoryId String?
+  // User's explicit decision about internal movement of funds:
+  // "none" = real income/expense, "internal" = internal transfer,
+  // "jar" = transfer to/from own jar (implies internal). null = defer to auto-detection.
+  transfer         String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

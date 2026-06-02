@@ -5,12 +5,15 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useData, type ManualAccountData, type ManualTransactionData, type FetchProgress } from "@/components/DataProvider";
 import RefreshButton from "@/components/RefreshButton";
 import CategoryDropdown from "@/components/CategoryDropdown";
+import TransferMenu from "@/components/TransferMenu";
 import AiCategorizationPanel from "@/components/AiCategorizationPanel";
 import DateRangeFilter, { getDefaultRange, type DateRange } from "@/components/DateRangeFilter";
 import { useDbHistory } from "@/lib/useDbHistory";
 import { formatAmount, getCurrencyInfo } from "@/lib/currency";
 import { CATEGORY_NAMES, getEffectiveCategory, getCategoryColor } from "@/lib/mcc";
 import { useCurrencyRates } from "@/lib/hooks";
+import { NO_TRANSFER } from "@/lib/transfers";
+import type { TransferMark, TransferDecision } from "@/lib/transfers";
 import type { MonobankAccount, MonobankStatement, MonobankCurrencyRate } from "@/types/monobank";
 
 function getUahRate(currencyCode: number, rates: MonobankCurrencyRate[]): number {
@@ -330,13 +333,18 @@ function TxRow({
   onEdit,
   onDelete,
   currencyRates,
+  mark,
+  decision,
 }: {
   item: UnifiedTx;
   onEdit: () => void;
   onDelete: () => void;
   currencyRates: MonobankCurrencyRate[];
+  mark: TransferMark;
+  decision: TransferDecision | undefined;
 }) {
   const isExpense = item.amount < 0;
+  const isInternal = mark.internal;
   const date = new Date(item.time * 1000);
   const isNotUah = item.currencyCode !== 980;
   const uahAmount = isNotUah ? toUah(item.amount, item.currencyCode, currencyRates) : null;
@@ -386,11 +394,28 @@ function TxRow({
               {item.badgeText}
             </span>
           )}
+          {isInternal && (
+            <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 inline-flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+              </svg>
+              {mark.jar ? "Власна банка" : "Внутрішнє переміщення"}
+              {mark.auto && <span className="text-blue-500">авто</span>}
+            </span>
+          )}
         </div>
       </div>
       <div className="text-right shrink-0 flex items-center gap-2">
         <div>
-          <div className={`text-sm font-semibold ${isExpense ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+          <div
+            className={`text-sm font-semibold ${
+              isInternal
+                ? "text-gray-400 dark:text-gray-500"
+                : isExpense
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-green-600 dark:text-green-400"
+            }`}
+          >
             {isExpense ? "" : "+"}{formatAmount(item.amount, item.currencyCode)}
           </div>
           {uahAmount !== null && (
@@ -403,6 +428,7 @@ function TxRow({
             {date.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}
           </div>
         </div>
+        <TransferMenu transactionId={item.id} mark={mark} decision={decision} />
         {isManual && (
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
@@ -439,6 +465,7 @@ function TransactionsContent() {
     refresh, lastRefreshedAt, from: liveFrom,
     manualAccounts, refreshManualAccounts,
     overrides, customCategories,
+    getTransferInfo, transferDecisions,
   } = useData();
   const { data: currencyRates } = useCurrencyRates();
   const searchParams = useSearchParams();
@@ -453,6 +480,7 @@ function TransactionsContent() {
   const [search, setSearch] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showAiPanel, setShowAiPanel] = useState(false);
+  const [showInternal, setShowInternal] = useState(true);
 
   useEffect(() => {
     if (tokenReady && !token) router.replace("/settings");
@@ -592,6 +620,12 @@ function TransactionsContent() {
     return items;
   }, [statements, monoAccountMap, manualAccounts, filterAccountId, filterSource, range.from, range.to, overrides, monoHistory, needHistory, includeMono]);
 
+  // Effective internal-transfer mark for every listed transaction.
+  const transferInfo = useMemo(
+    () => getTransferInfo(allTransactions),
+    [getTransferInfo, allTransactions]
+  );
+
   const filtered = useMemo(() => {
     let result = allTransactions;
     if (search) {
@@ -610,8 +644,13 @@ function TransactionsContent() {
         return selectedCategories.includes(item.badgeText);
       });
     }
+    // Internal movements are hidden (and dropped from the totals below) when the
+    // "show internal movements" filter is off.
+    if (!showInternal) {
+      result = result.filter((item) => !transferInfo.get(item.id)?.internal);
+    }
     return result;
-  }, [allTransactions, search, selectedCategories]);
+  }, [allTransactions, search, selectedCategories, showInternal, transferInfo]);
 
   const uncategorizedForAi = useMemo(() => {
     const result: { id: string; description: string; mcc: number; originalMcc: number; amount: number; counterName?: string; counterEdrpou?: string; comment?: string }[] = [];
@@ -619,6 +658,7 @@ function TransactionsContent() {
       for (const tx of txList as MonobankStatement[]) {
         if (tx.time < range.from || tx.time > range.to) continue;
         if (overrides[tx.id]) continue;
+        if (transferInfo.get(tx.id)?.internal) continue;
         const cat = getEffectiveCategory(tx.mcc, tx.id, overrides);
         if (cat.name !== "Інше") continue;
         if (tx.amount >= 0) continue;
@@ -635,7 +675,7 @@ function TransactionsContent() {
       }
     }
     return result;
-  }, [statements, range.from, range.to, overrides]);
+  }, [statements, range.from, range.to, overrides, transferInfo]);
 
   const totalIncome = filtered
     .filter((i) => i.amount > 0)
@@ -786,6 +826,16 @@ function TransactionsContent() {
 
         <DateRangeFilter onChange={setRange} />
 
+        <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none whitespace-nowrap">
+          <input
+            type="checkbox"
+            checked={showInternal}
+            onChange={(e) => setShowInternal(e.target.checked)}
+            className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+          />
+          Показувати внутрішні переміщення
+        </label>
+
         <input
           type="text"
           placeholder="Пошук транзакцій..."
@@ -870,6 +920,8 @@ function TransactionsContent() {
               onEdit={() => item.manualTx && item.manualAccount && handleEdit(item.manualTx, item.manualAccount.id)}
               onDelete={() => handleDelete(item.id)}
               currencyRates={currencyRates}
+              mark={transferInfo.get(item.id) || NO_TRANSFER}
+              decision={transferDecisions[item.id]}
             />
           ))
         )}

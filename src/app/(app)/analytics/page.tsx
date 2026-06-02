@@ -25,6 +25,7 @@ export default function AnalyticsPage() {
     from: liveFrom,
     lastRefreshedAt,
     overrides,
+    getTransferInfo,
   } = useData();
   const router = useRouter();
 
@@ -56,8 +57,15 @@ export default function AnalyticsPage() {
     return [...live, ...extra].sort((a, b) => b.time - a.time);
   }, [getFiltered, selectedAccounts, range.from, range.to, needHistory, history]);
 
+  // Internal movements (jar/own-card transfers) are never income or expense, so
+  // they are excluded from every analytic view.
+  const spendable = useMemo(() => {
+    const info = getTransferInfo(transactions);
+    return transactions.filter((tx) => !info.get(tx.id)?.internal);
+  }, [transactions, getTransferInfo]);
+
   const categoryBreakdown = useMemo(() => {
-    const expenses = transactions.filter((tx) => tx.amount < 0);
+    const expenses = spendable.filter((tx) => tx.amount < 0);
     const map = new Map<string, { total: number; count: number; color: string }>();
     for (const tx of expenses) {
       const { name: cat, color } = getEffectiveCategory(tx.mcc, tx.id, overrides);
@@ -69,7 +77,7 @@ export default function AnalyticsPage() {
     return Array.from(map.entries())
       .map(([name, data]) => ({ name, ...data }))
       .sort((a, b) => b.total - a.total);
-  }, [transactions, overrides]);
+  }, [spendable, overrides]);
 
   const totalExpenses = categoryBreakdown.reduce((s, c) => s + c.total, 0);
 
@@ -123,7 +131,7 @@ export default function AnalyticsPage() {
                 Витрати за категоріями
               </h2>
               <SpendingChart
-                transactions={transactions}
+                transactions={spendable}
                 currencyCode={currencyCode}
                 overrides={overrides}
               />
@@ -185,7 +193,7 @@ export default function AnalyticsPage() {
               Щоденні надходження та витрати
             </h2>
             <DailyChart
-              transactions={transactions}
+              transactions={spendable}
               currencyCode={currencyCode}
             />
           </div>

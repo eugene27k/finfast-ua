@@ -456,7 +456,7 @@
      Цей блок переписується кожного разу при генерації. -->
 <script id="arch-data" type="application/json">
 {
-  "generatedAt": "2026-06-01T10:39:38.508Z",
+  "generatedAt": "2026-06-02T11:16:56.010Z",
   "cols": {
     "ui": {
       "x": 8,
@@ -939,13 +939,14 @@
       "id": "api-transactions-overrides",
       "group": "api",
       "kind": "api",
-      "name": "GET/PUT /api/transactions/overrides",
+      "name": "GET/PUT/PATCH /api/transactions/overrides",
       "sub": "GET/PUT перевизначення категорії транзакції",
       "path": "src/app/api/transactions/overrides/route.ts",
       "url": "/api/transactions/overrides",
       "methods": [
         "GET",
-        "PUT"
+        "PUT",
+        "PATCH"
       ],
       "col": "api",
       "y": 880,
@@ -1018,7 +1019,7 @@
       "sub": "доступ до зашифрованого vault, тримає ключ у пам'яті",
       "path": "src/lib/auth/vault.ts",
       "col": "lib",
-      "y": 1280,
+      "y": 1360,
       "module": "m-vault"
     },
     {
@@ -1121,6 +1122,16 @@
       "module": "m-sync"
     },
     {
+      "id": "lib-transfers",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/transfers.ts",
+      "sub": "",
+      "path": "src/lib/transfers.ts",
+      "col": "lib",
+      "y": 1120
+    },
+    {
       "id": "lib-usedbhistory",
       "group": "lib",
       "kind": "lib",
@@ -1128,7 +1139,7 @@
       "sub": "",
       "path": "src/lib/useDbHistory.ts",
       "col": "lib",
-      "y": 1120
+      "y": 1200
     },
     {
       "id": "lib-usemonthcomparison",
@@ -1138,7 +1149,7 @@
       "sub": "порівняння витрат поточного vs минулого місяця",
       "path": "src/lib/useMonthComparison.ts",
       "col": "lib",
-      "y": 1200,
+      "y": 1280,
       "module": "m-anal"
     },
     {
@@ -1302,6 +1313,16 @@
       "y": 1200
     },
     {
+      "id": "comp-transfermenu",
+      "group": "comp",
+      "kind": "comp",
+      "name": "TransferMenu",
+      "sub": "",
+      "path": "src/components/TransferMenu.tsx",
+      "col": "comp",
+      "y": 1280
+    },
+    {
       "id": "db-sqlite",
       "group": "db",
       "kind": "db",
@@ -1442,6 +1463,14 @@
       "to": "api-monobank-statement"
     },
     {
+      "from": "comp-dataprovider",
+      "to": "api-transactions-history"
+    },
+    {
+      "from": "comp-transfermenu",
+      "to": "api-transactions-overrides"
+    },
+    {
       "from": "lib-hooks",
       "to": "api-monobank-currency"
     },
@@ -1566,6 +1595,14 @@
       "to": "lib-currency"
     },
     {
+      "from": "comp-dataprovider",
+      "to": "lib-accounts"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "lib-transfers"
+    },
+    {
       "from": "comp-monthcomparison",
       "to": "lib-currency"
     },
@@ -1580,6 +1617,10 @@
     {
       "from": "comp-spendingchart",
       "to": "lib-currency"
+    },
+    {
+      "from": "comp-transfermenu",
+      "to": "lib-transfers"
     },
     {
       "from": "lib-bootstrap",
@@ -1674,6 +1715,10 @@
       "to": "lib-hooks"
     },
     {
+      "from": "page-transactions-new",
+      "to": "lib-transfers"
+    },
+    {
       "from": "comp-dataprovider",
       "to": "page-accounts"
     },
@@ -1754,12 +1799,20 @@
       "to": "page-transactions-new"
     },
     {
+      "from": "comp-transfermenu",
+      "to": "page-transactions-new"
+    },
+    {
       "from": "comp-aicategorizationpanel",
       "to": "page-transactions-new"
     },
     {
       "from": "comp-daterangefilter",
       "to": "page-transactions-new"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "comp-accountfilter"
     },
     {
       "from": "comp-dataprovider",
@@ -1788,6 +1841,10 @@
     {
       "from": "comp-themeprovider",
       "to": "comp-spendingchart"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "comp-transfermenu"
     },
     {
       "from": "lib-prisma",

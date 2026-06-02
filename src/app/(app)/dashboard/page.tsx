@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function DashboardPage() {
-  const { token, tokenReady, client, clientLoading: loading, clientError: error, getFiltered, overrides, activeAccountIds } = useData();
+  const { token, tokenReady, client, clientLoading: loading, clientError: error, getFiltered, overrides, activeAccountIds, getTransferInfo } = useData();
   const { data: rates } = useCurrencyRates();
   const { budgets } = useBudgets();
   const router = useRouter();
@@ -27,8 +27,11 @@ export default function DashboardPage() {
 
   const monthTransactions = useMemo(() => {
     const all = getFiltered([]);
-    return all.filter((tx) => tx.time >= monthStart);
-  }, [getFiltered, monthStart]);
+    const inMonth = all.filter((tx) => tx.time >= monthStart);
+    // Internal movements (jar / own-card transfers) are not spending.
+    const info = getTransferInfo(inMonth);
+    return inMonth.filter((tx) => !info.get(tx.id)?.internal);
+  }, [getFiltered, monthStart, getTransferInfo]);
 
   const budgetStatuses = useMemo(
     () => getBudgetStatuses(budgets, monthTransactions, overrides),

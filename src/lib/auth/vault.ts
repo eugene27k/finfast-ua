@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { openDb, closeDb, closeDbAndWait } from "@/lib/prisma";
+import { openDb, closeDb, closeDbAndWait, DB_PATH } from "@/lib/prisma";
+import { applyMigrations } from "@/lib/db/migrator";
 
 /**
  * In-memory vault: holds the active encryption key (DEK) and live sessions.
@@ -35,6 +36,10 @@ function vault(): VaultState {
 export function unlockVault(dek: Buffer): void {
   const v = vault();
   v.dekHex = dek.toString("hex");
+  // Apply any pending migrations now that we hold the key — this is the only
+  // moment the encrypted DB can be migrated. Idempotent: already-applied
+  // migrations are skipped. Must run before the Prisma client issues queries.
+  applyMigrations(DB_PATH, v.dekHex);
   openDb(v.dekHex);
 }
 
