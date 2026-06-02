@@ -42,9 +42,14 @@ export interface TransferMark {
 
 export const NO_TRANSFER: TransferMark = { internal: false, jar: false, auto: false };
 
-// "На банку", "З банки", "Із банки", "Зі банки" — Monobank's standard wording
-// for jar top-ups/withdrawals on the card statement.
-const JAR_RE = /(^|\s)(на|з|із|зі)\s+банк[ауиі]/iu;
+// A name wrapped in quotes, e.g. «На Крипту» in "Округлення балансу «На Крипту»"
+// or «На Резерв Поточний» in "Часткове зняття банки «На Резерв Поточний»".
+// Covers guillemets, curly and straight double quotes.
+const QUOTED_RE = /[«»„“”"]([^«»„“”"]{1,100})[«»„“”"]/gu;
+
+// Known jar-operation wording on the card statement: "На банку", "З банки",
+// "Часткове зняття банки", "Поповнення банки" — i.e. the jar noun «банк…».
+const JAR_OP_RE = /(на банку|з банки|із банки|зі банки|зняття банк|поповнення банк)/iu;
 
 // "З чорної картки", "З білої картки", "З картки …" — money arriving from another
 // of the user's own cards (the card type is a free mask: Чорна/Біла/Platinum/…).
@@ -54,6 +59,11 @@ function normalize(s: string | null | undefined): string {
   return (s ?? "").trim().toLowerCase();
 }
 
+/** All quoted names found in a description (e.g. the jar name in «…»). */
+function extractQuoted(description: string): string[] {
+  return [...description.matchAll(QUOTED_RE)].map((m) => m[1]);
+}
+
 /**
  * Per-transaction auto classification from the description alone.
  * Returns "jar", "internal", or null (looks like a normal transaction).
@@ -61,11 +71,17 @@ function normalize(s: string | null | undefined): string {
 function autoClassify(description: string, jarTitlesNorm: Set<string>): TransferDecision | null {
   const d = normalize(description);
   if (!d) return null;
-  // Exact match against one of the user's real jar names (rule 2.1), or
-  // Monobank's standard jar wording.
+  // The whole description is exactly a jar name.
   if (jarTitlesNorm.has(d)) return "jar";
-  if (JAR_RE.test(description)) return "jar";
-  // Money from another of the user's own cards (rule 2.2).
+  // A quoted name inside the description matches one of the user's real jars,
+  // e.g. «На Крипту» or «На Резерв Поточний». Quotes delimit the name precisely,
+  // so this is safe even when the jar name is a common word.
+  for (const q of extractQuoted(description)) {
+    if (jarTitlesNorm.has(normalize(q))) return "jar";
+  }
+  // Monobank's standard jar-operation wording (catches jars not in the list too).
+  if (JAR_OP_RE.test(description)) return "jar";
+  // Money from another of the user's own cards.
   if (FROM_CARD_RE.test(description)) return "internal";
   return null;
 }

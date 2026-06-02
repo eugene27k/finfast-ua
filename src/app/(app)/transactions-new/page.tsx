@@ -481,6 +481,8 @@ function TransactionsContent() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [showInternal, setShowInternal] = useState(true);
+  const [showIncome, setShowIncome] = useState(true);
+  const [showExpense, setShowExpense] = useState(true);
 
   useEffect(() => {
     if (tokenReady && !token) router.replace("/settings");
@@ -688,6 +690,13 @@ function TransactionsContent() {
     .filter((i) => i.amount < 0)
     .reduce((sum, i) => sum + toUah(Math.abs(i.amount), i.currencyCode, currencyRates), 0);
 
+  const displayedTransactions = useMemo(() => {
+    let result = filtered;
+    if (!showIncome) result = result.filter((i) => i.amount <= 0);
+    if (!showExpense) result = result.filter((i) => i.amount >= 0);
+    return result;
+  }, [filtered, showIncome, showExpense]);
+
   const handleCreate = async (data: { manualAccountId: string; amount: number; description: string; time: number }) => {
     const res = await fetch("/api/manual-transactions", {
       method: "POST",
@@ -890,20 +899,34 @@ function TransactionsContent() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
           <p className="text-sm text-gray-500 dark:text-gray-400">Транзакцій</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{filtered.length}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{displayedTransactions.length}</p>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => setShowIncome((v) => !v)}
+          className={`p-4 rounded-xl border text-left transition-all cursor-pointer select-none ${
+            showIncome
+              ? "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-100"
+              : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-40"
+          }`}
+        >
           <p className="text-sm text-gray-500 dark:text-gray-400">Надходження</p>
           <p className="text-2xl font-bold text-green-600 dark:text-green-400">
             +{formatAmount(totalIncome, 980)}
           </p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+        </button>
+        <button
+          onClick={() => setShowExpense((v) => !v)}
+          className={`p-4 rounded-xl border text-left transition-all cursor-pointer select-none ${
+            showExpense
+              ? "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-100"
+              : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 opacity-40"
+          }`}
+        >
           <p className="text-sm text-gray-500 dark:text-gray-400">Витрати</p>
           <p className="text-2xl font-bold text-red-600 dark:text-red-400">
             -{formatAmount(totalExpense, 980)}
           </p>
-        </div>
+        </button>
       </div>
 
       {/* Transaction list */}
@@ -912,12 +935,12 @@ function TransactionsContent() {
           <LoadingProgress progress={progress} accounts={client?.accounts || []} />
         ) : statementsError ? (
           <div className="p-4 text-red-600 dark:text-red-400 text-sm">{statementsError}</div>
-        ) : filtered.length === 0 ? (
+        ) : displayedTransactions.length === 0 ? (
           <div className="p-8 text-center text-gray-400">
             Немає транзакцій за обраний період
           </div>
         ) : (
-          filtered.map((item) => (
+          displayedTransactions.map((item) => (
             <TxRow
               key={`${item.source}-${item.id}`}
               item={item}

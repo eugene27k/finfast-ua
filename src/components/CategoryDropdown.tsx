@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useData } from "@/components/DataProvider";
-import { getMccCategory, getCategoryColor } from "@/lib/mcc";
+import { CATEGORY_NAMES, getMccCategory, getCategoryColor } from "@/lib/mcc";
 
 interface CategoryDropdownProps {
   transactionId: string;
@@ -18,6 +18,15 @@ const PRESET_COLORS = [
   "#ec4899", "#64748b",
 ];
 
+const DROPDOWN_WIDTH = 256; // w-64
+
+interface DropdownPos {
+  left: number;
+  top?: number;
+  bottom?: number;
+  maxHeight: number;
+}
+
 export default function CategoryDropdown({
   transactionId,
   mcc,
@@ -30,9 +39,12 @@ export default function CategoryDropdown({
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(PRESET_COLORS[0]);
   const [saving, setSaving] = useState(false);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [pos, setPos] = useState<DropdownPos>({ left: 0, top: 0, maxHeight: 320 });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const isOverridden = !!overrides[transactionId];
+  const monoCategory = getMccCategory(mcc);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -52,23 +64,32 @@ export default function CategoryDropdown({
     e.stopPropagation();
     if (!open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      // Flip upward only when there's clearly not enough room below.
+      const openUp = spaceBelow < 300 && spaceAbove > spaceBelow;
+      const left = Math.max(
+        8,
+        Math.min(rect.left, window.innerWidth - DROPDOWN_WIDTH - 8)
+      );
+      setPos({
+        left,
+        top: openUp ? undefined : rect.bottom + 4,
+        bottom: openUp ? window.innerHeight - rect.top + 4 : undefined,
+        maxHeight: Math.max(180, (openUp ? spaceAbove : spaceBelow) - 16),
+      });
     }
     setOpen(!open);
   };
 
-  const handleSelect = async (categoryId: string | null) => {
+  const putOverride = async (body: Record<string, unknown>) => {
     if (!userId) return;
     setSaving(true);
     try {
       await fetch("/api/transactions/overrides", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          transactionId,
-          customCategoryId: categoryId,
-        }),
+        body: JSON.stringify({ userId, transactionId, ...body }),
       });
       refreshOverrides();
     } finally {
@@ -76,6 +97,18 @@ export default function CategoryDropdown({
       setOpen(false);
     }
   };
+
+  // Custom-category override (or reset when id is null).
+  const handleSelect = (categoryId: string | null) =>
+    putOverride({ customCategoryId: categoryId });
+
+  // Clear any override → fall back to the automatic MCC category.
+  const handleReset = () => putOverride({ customCategoryId: null, monoCategoryName: null });
+
+  // Built-in Mono-category override. Selecting the MCC-derived one just resets
+  // to automatic, keeping the "manually overridden" marker honest.
+  const handleSelectMono = (name: string) =>
+    name === monoCategory ? handleReset() : putOverride({ monoCategoryName: name });
 
   const handleCreate = async () => {
     if (!userId || !newName.trim()) return;
@@ -98,10 +131,6 @@ export default function CategoryDropdown({
     }
   };
 
-  const isOverridden = !!overrides[transactionId];
-  const monoCategory = getMccCategory(mcc);
-  const monoColor = getCategoryColor(monoCategory);
-
   return (
     <div className="relative inline-block">
       <button
@@ -123,7 +152,7 @@ export default function CategoryDropdown({
         <div
           ref={dropdownRef}
           className="fixed w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-[9999] overflow-hidden"
-          style={{ top: dropdownPos.top, left: dropdownPos.left }}
+          style={{ left: pos.left, top: pos.top, bottom: pos.bottom }}
         >
           {saving && (
             <div className="absolute inset-0 bg-white/70 dark:bg-gray-800/70 flex items-center justify-center z-10">
@@ -131,31 +160,50 @@ export default function CategoryDropdown({
             </div>
           )}
 
-          <div className="max-h-80 overflow-y-auto">
+          <div className="overflow-y-auto" style={{ maxHeight: pos.maxHeight }}>
             {isOverridden && (
               <button
-                onClick={() => handleSelect(null)}
+                onClick={handleReset}
                 className="w-full text-left px-3 py-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-b border-gray-100 dark:border-gray-700 flex items-center gap-1.5"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
                 </svg>
-                Скинути до Mono-категорії
+                Скинути до авто (MCC {mcc})
               </button>
             )}
 
+            {/* Built-in Monobank categories — selectable without duplicating them. */}
             <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider bg-gray-50 dark:bg-gray-900">
-              Mono-категорія (з MCC {mcc})
+              Mono-категорії
             </div>
-            <div className="px-3 py-2 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: monoColor }} />
-              <span className="flex-1">{monoCategory}</span>
-              {!isOverridden && (
-                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium uppercase tracking-wider">
-                  активна
-                </span>
-              )}
-            </div>
+            {CATEGORY_NAMES.map((name) => {
+              const color = getCategoryColor(name);
+              const isAuto = name === monoCategory;
+              const isActive = currentCategory === name;
+              return (
+                <button
+                  key={name}
+                  onClick={() => handleSelectMono(name)}
+                  className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 ${
+                    isActive ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400" : "text-gray-700 dark:text-gray-300"
+                  }`}
+                >
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <span className="flex-1">{name}</span>
+                  {isAuto && (
+                    <span className="text-[9px] text-gray-400 dark:text-gray-500 font-medium uppercase tracking-wider shrink-0">
+                      авто
+                    </span>
+                  )}
+                  {isActive && (
+                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+              );
+            })}
 
             {customCategories.length > 0 && (
               <>

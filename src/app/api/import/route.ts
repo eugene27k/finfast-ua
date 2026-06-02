@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth/session";
+import { CATEGORY_NAMES } from "@/lib/mcc";
 
 const SUPPORTED_VERSIONS = [1];
+const MONO_CATEGORY_SET = new Set(CATEGORY_NAMES);
 
 interface ImportTransaction {
   id: string;
@@ -176,17 +178,29 @@ export async function POST(request: NextRequest) {
 
       for (const ov of overrides) {
         if (existingOverrideIds.has(ov.transactionId)) continue;
-        const catId = categoryNameToId[ov.categoryName];
-        if (!catId) continue;
 
-        await db.transactionOverride.create({
-          data: {
-            userId,
-            transactionId: ov.transactionId,
-            customCategoryId: catId,
-          },
-        });
-        stats.overridesCreated++;
+        // Prefer a matching custom category; otherwise treat a known built-in
+        // name as a Mono-category override. Unknown names are skipped.
+        const catId = categoryNameToId[ov.categoryName];
+        if (catId) {
+          await db.transactionOverride.create({
+            data: {
+              userId,
+              transactionId: ov.transactionId,
+              customCategoryId: catId,
+            },
+          });
+          stats.overridesCreated++;
+        } else if (MONO_CATEGORY_SET.has(ov.categoryName)) {
+          await db.transactionOverride.create({
+            data: {
+              userId,
+              transactionId: ov.transactionId,
+              categoryName: ov.categoryName,
+            },
+          });
+          stats.overridesCreated++;
+        }
       }
     }
 

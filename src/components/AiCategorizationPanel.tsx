@@ -5,6 +5,8 @@ import { useData } from "@/components/DataProvider";
 import { CATEGORY_NAMES, getCategoryColor } from "@/lib/mcc";
 import { formatAmount } from "@/lib/currency";
 
+const MONO_CATEGORY_SET = new Set(CATEGORY_NAMES);
+
 interface TxForAi {
   id: string;
   description: string;
@@ -103,40 +105,49 @@ export default function AiCategorizationPanel({ uncategorizedTxs, onClose, onApp
     if (!userId) return;
     setApplying((prev) => ({ ...prev, [suggestion.transactionId]: true }));
 
-    const customCat = customCategories.find((c) => c.name === suggestion.suggestedCategory);
+    try {
+      // Built-in Mono category → store as a Mono override, no duplicate custom
+      // category. Only fall back to a custom category for genuinely new names.
+      const existingCustom = customCategories.find(
+        (c) => c.name === suggestion.suggestedCategory
+      );
+      let overrideBody: Record<string, unknown> | null = null;
 
-    let categoryId: string | null = customCat?.id || null;
+      if (existingCustom) {
+        overrideBody = { customCategoryId: existingCustom.id };
+      } else if (MONO_CATEGORY_SET.has(suggestion.suggestedCategory)) {
+        overrideBody = { monoCategoryName: suggestion.suggestedCategory };
+      } else {
+        const res = await fetch("/api/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId,
+            name: suggestion.suggestedCategory,
+            color: getCategoryColor(suggestion.suggestedCategory),
+          }),
+        });
+        const data = await res.json();
+        if (data.category) overrideBody = { customCategoryId: data.category.id };
+      }
 
-    if (!categoryId) {
-      const res = await fetch("/api/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          name: suggestion.suggestedCategory,
-          color: getCategoryColor(suggestion.suggestedCategory),
-        }),
-      });
-      const data = await res.json();
-      if (data.category) categoryId = data.category.id;
+      if (overrideBody) {
+        await fetch("/api/transactions/overrides", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId,
+            transactionId: suggestion.transactionId,
+            ...overrideBody,
+          }),
+        });
+        setApplied((prev) => new Set(prev).add(suggestion.transactionId));
+        refreshOverrides();
+        onApplied();
+      }
+    } finally {
+      setApplying((prev) => ({ ...prev, [suggestion.transactionId]: false }));
     }
-
-    if (categoryId) {
-      await fetch("/api/transactions/overrides", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          transactionId: suggestion.transactionId,
-          customCategoryId: categoryId,
-        }),
-      });
-      setApplied((prev) => new Set(prev).add(suggestion.transactionId));
-      refreshOverrides();
-      onApplied();
-    }
-
-    setApplying((prev) => ({ ...prev, [suggestion.transactionId]: false }));
   };
 
   const handleApplyAll = async () => {

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth/session";
+import { CATEGORY_NAMES, getCategoryColor } from "@/lib/mcc";
+
+const MONO_CATEGORY_SET = new Set(CATEGORY_NAMES);
 
 export async function GET(request: NextRequest) {
   const auth = requireUser(request);
@@ -15,10 +18,19 @@ export async function GET(request: NextRequest) {
     const result: Record<string, { categoryName: string; color: string }> = {};
     const transfers: Record<string, string> = {};
     for (const o of overrides) {
+      // A custom category takes precedence; otherwise fall back to a chosen
+      // built-in Mono category. Both resolve to the same { categoryName, color }
+      // shape, so every consumer (transactions, analytics, charts, budgets)
+      // treats Mono and custom overrides identically.
       if (o.customCategory) {
         result[o.transactionId] = {
           categoryName: o.customCategory.name,
           color: o.customCategory.color,
+        };
+      } else if (o.categoryName) {
+        result[o.transactionId] = {
+          categoryName: o.categoryName,
+          color: getCategoryColor(o.categoryName),
         };
       }
       if (o.transfer) {
@@ -38,7 +50,8 @@ export async function PUT(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { transactionId, customCategoryId } = await request.json();
+    const { transactionId, customCategoryId, monoCategoryName } =
+      await request.json();
     if (!transactionId) {
       return NextResponse.json(
         { error: "transactionId is required" },
@@ -49,15 +62,44 @@ export async function PUT(request: NextRequest) {
     const db = getDb();
     const userId = auth.userId;
 
-    if (!customCategoryId) {
-      // Remove override — fall back to MCC category
-      await db.transactionOverride.deleteMany({
-        where: { userId, transactionId },
+    if (!customCategoryId && !monoCategoryName) {
+      // Remove override — fall back to the automatic MCC category. The transfer
+      // decision lives on the same row, so only clear the category fields if a
+      // transfer decision still needs to be kept.
+      const existing = await db.transactionOverride.findUnique({
+        where: { userId_transactionId: { userId, transactionId } },
+        select: { transfer: true },
       });
+      if (existing?.transfer) {
+        await db.transactionOverride.update({
+          where: { userId_transactionId: { userId, transactionId } },
+          data: { customCategoryId: null, categoryName: null },
+        });
+      } else {
+        await db.transactionOverride.deleteMany({
+          where: { userId, transactionId },
+        });
+      }
       return NextResponse.json({ ok: true, removed: true });
     }
 
-    // Ensure the target category belongs to the caller.
+    // Built-in Mono category override — no custom category needed.
+    if (monoCategoryName && !customCategoryId) {
+      if (!MONO_CATEGORY_SET.has(monoCategoryName)) {
+        return NextResponse.json(
+          { error: "Unknown Mono category" },
+          { status: 400 }
+        );
+      }
+      const override = await db.transactionOverride.upsert({
+        where: { userId_transactionId: { userId, transactionId } },
+        update: { categoryName: monoCategoryName, customCategoryId: null },
+        create: { userId, transactionId, categoryName: monoCategoryName },
+      });
+      return NextResponse.json({ override });
+    }
+
+    // Custom category override — ensure the target category belongs to the caller.
     const ownedCat = await db.customCategory.findFirst({
       where: { id: customCategoryId, userId },
       select: { id: true },
@@ -68,7 +110,7 @@ export async function PUT(request: NextRequest) {
 
     const override = await db.transactionOverride.upsert({
       where: { userId_transactionId: { userId, transactionId } },
-      update: { customCategoryId },
+      update: { customCategoryId, categoryName: null },
       create: { userId, transactionId, customCategoryId },
       include: { customCategory: true },
     });

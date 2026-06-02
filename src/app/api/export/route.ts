@@ -40,17 +40,20 @@ export async function GET(request: NextRequest) {
       color: rest.color,
     }));
 
-    // Map overrides: keep transactionId + categoryName (resolved by name on import)
+    // Map overrides to a portable { transactionId, categoryName } shape. The
+    // name is either a custom category's name or a built-in Mono category name;
+    // import resolves which is which by looking the name up on the target vault.
     const catIdToName: Record<string, string> = {};
     for (const c of categories) catIdToName[c.id] = c.name;
 
     const overrideData = overrides
-      .filter((o) => o.customCategoryId)
-      .map((o) => ({
-        transactionId: o.transactionId,
-        categoryName: catIdToName[o.customCategoryId!] || null,
-      }))
-      .filter((o) => o.categoryName);
+      .map((o) => {
+        const name = o.customCategoryId
+          ? catIdToName[o.customCategoryId] || null
+          : o.categoryName || null;
+        return name ? { transactionId: o.transactionId, categoryName: name } : null;
+      })
+      .filter((o): o is { transactionId: string; categoryName: string } => o !== null);
 
     const manualAccountsData = manualAccountsRaw.map((acc) => ({
       name: acc.name,

@@ -66,6 +66,12 @@ model TransactionOverride {
   userId           String
   transactionId    String
   customCategoryId String?
+  // Built-in Monobank category name chosen by the user (e.g. "Продукти").
+  // Used when the override points to a built-in category rather than a custom
+  // one, so the user can reuse Mono categories without duplicating them as
+  // custom categories. Mutually exclusive with customCategoryId in practice;
+  // customCategoryId takes precedence if both are set.
+  categoryName     String?
   // User's explicit decision about internal movement of funds:
   // "none" = real income/expense, "internal" = internal transfer,
   // "jar" = transfer to/from own jar (implies internal). null = defer to auto-detection.
