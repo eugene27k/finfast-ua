@@ -480,7 +480,7 @@ function TransactionsContent() {
   const [search, setSearch] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showAiPanel, setShowAiPanel] = useState(false);
-  const [showInternal, setShowInternal] = useState(true);
+  const [showInternal, setShowInternal] = useState(false);
   const [showIncome, setShowIncome] = useState(true);
   const [showExpense, setShowExpense] = useState(true);
 
@@ -683,6 +683,8 @@ function TransactionsContent() {
     return result;
   }, [statements, range.from, range.to, overrides, transferInfo]);
 
+  // Totals follow the same `filtered` set as the list, so the "show internal
+  // movements" toggle controls both the rows shown and the income/expense sums.
   const totalIncome = filtered
     .filter((i) => i.amount > 0)
     .reduce((sum, i) => sum + toUah(i.amount, i.currencyCode, currencyRates), 0);
