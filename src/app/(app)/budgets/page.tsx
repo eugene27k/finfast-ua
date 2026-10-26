@@ -3,7 +3,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useData } from "@/components/DataProvider";
-import { useBudgets, getBudgetStatuses } from "@/lib/budgets";
+import { useBudgets, getBudgetStatuses, type BudgetPeriod } from "@/lib/budgets";
+import { buildAccountCurrencyMap } from "@/lib/analytics";
+import { useCurrencyRates } from "@/lib/hooks";
 import { CATEGORY_NAMES, getCategoryColor } from "@/lib/mcc";
 import { getCurrencyInfo } from "@/lib/currency";
 import BudgetProgressCard from "@/components/BudgetProgressCard";
@@ -15,6 +17,7 @@ export default function BudgetsPage() {
     token,
     tokenReady,
     client,
+    statements,
     statementsLoading: loading,
     refresh,
     getFiltered,
@@ -24,6 +27,7 @@ export default function BudgetsPage() {
     getTransferInfo,
   } = useData();
   const { budgets, ready: budgetsReady, setBudget, removeBudget } = useBudgets();
+  const { data: rates } = useCurrencyRates();
   const router = useRouter();
 
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
@@ -32,6 +36,7 @@ export default function BudgetsPage() {
   const [editCategory, setEditCategory] = useState<string | null>(null);
   const [formCategory, setFormCategory] = useState("");
   const [formAmount, setFormAmount] = useState("");
+  const [formPeriod, setFormPeriod] = useState<BudgetPeriod>("day");
 
   useEffect(() => {
     if (tokenReady && !token) router.replace("/settings");
@@ -44,7 +49,8 @@ export default function BudgetsPage() {
     [now.getMonth(), now.getFullYear()]
   );
 
-  const currencyCode = client?.accounts[0]?.currencyCode || 980;
+  // Budgets and spending are normalised to UAH so multi-currency cards combine.
+  const currencyCode = 980;
 
   const transactions = useMemo(() => {
     const all = getFiltered(selectedAccounts);
@@ -54,9 +60,17 @@ export default function BudgetsPage() {
     return inMonth.filter((tx) => !info.get(tx.id)?.internal);
   }, [getFiltered, selectedAccounts, monthStart, getTransferInfo]);
 
+  // `amount` is in each transaction's ACCOUNT currency; the statement's
+  // currencyCode is the operation currency. Resolve account currency by id so
+  // spend converts to UAH correctly (a no-op for UAH cards).
+  const accountCurrencyByTxId = useMemo(
+    () => buildAccountCurrencyMap(statements, client?.accounts ?? []),
+    [statements, client]
+  );
+
   const statuses = useMemo(
-    () => getBudgetStatuses(budgets, transactions, overrides),
-    [budgets, transactions, overrides]
+    () => getBudgetStatuses(budgets, transactions, overrides, rates, accountCurrencyByTxId),
+    [budgets, transactions, overrides, rates, accountCurrencyByTxId]
   );
 
   const allCategoryNames = useMemo(
@@ -75,6 +89,7 @@ export default function BudgetsPage() {
     setEditCategory(null);
     setFormCategory(availableCategories[0] || "");
     setFormAmount("");
+    setFormPeriod("day");
     setShowForm(true);
   };
 
@@ -82,7 +97,9 @@ export default function BudgetsPage() {
     setEditCategory(category);
     setFormCategory(category);
     const info = getCurrencyInfo(currencyCode);
-    setFormAmount(String(budgets[category] / Math.pow(10, info.digits)));
+    const entry = budgets[category];
+    setFormAmount(String(entry.amount / Math.pow(10, info.digits)));
+    setFormPeriod(entry.period);
     setShowForm(true);
   };
 
@@ -95,7 +112,7 @@ export default function BudgetsPage() {
     if (editCategory && editCategory !== formCategory) {
       removeBudget(editCategory);
     }
-    setBudget(formCategory, minorUnits);
+    setBudget(formCategory, minorUnits, formPeriod);
     setShowForm(false);
     setEditCategory(null);
   };
@@ -169,6 +186,15 @@ export default function BudgetsPage() {
                 {getCurrencyInfo(currencyCode).symbol}
               </span>
             </div>
+            <select
+              value={formPeriod}
+              onChange={(e) => setFormPeriod(e.target.value as BudgetPeriod)}
+              className="px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="day">на день</option>
+              <option value="week">на тиждень</option>
+              <option value="month">на місяць</option>
+            </select>
             <div className="flex gap-2">
               <button
                 onClick={handleSave}

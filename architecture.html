@@ -456,7 +456,7 @@
      Цей блок переписується кожного разу при генерації. -->
 <script id="arch-data" type="application/json">
 {
-  "generatedAt": "2026-06-03T16:11:34.807Z",
+  "generatedAt": "2026-06-29T09:54:27.730Z",
   "cols": {
     "ui": {
       "x": 8,
@@ -979,6 +979,16 @@
       "module": "m-net"
     },
     {
+      "id": "lib-analytics",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/analytics.ts",
+      "sub": "",
+      "path": "src/lib/analytics.ts",
+      "col": "lib",
+      "y": 160
+    },
+    {
       "id": "lib-bootstrap",
       "group": "lib",
       "kind": "lib",
@@ -986,7 +996,7 @@
       "sub": "ініціалізація vault при першому запуску",
       "path": "src/lib/auth/bootstrap.ts",
       "col": "lib",
-      "y": 160,
+      "y": 240,
       "module": "m-auth"
     },
     {
@@ -997,7 +1007,7 @@
       "sub": "низькорівневі crypto-операції (KDF, AEAD)",
       "path": "src/lib/auth/crypto.ts",
       "col": "lib",
-      "y": 320,
+      "y": 400,
       "module": "m-vault"
     },
     {
@@ -1008,7 +1018,7 @@
       "sub": "управління сесіями (cookie / in-memory key)",
       "path": "src/lib/auth/session.ts",
       "col": "lib",
-      "y": 1040,
+      "y": 1200,
       "module": "m-auth"
     },
     {
@@ -1019,7 +1029,7 @@
       "sub": "доступ до зашифрованого vault, тримає ключ у пам'яті",
       "path": "src/lib/auth/vault.ts",
       "col": "lib",
-      "y": 1360,
+      "y": 1520,
       "module": "m-vault"
     },
     {
@@ -1030,7 +1040,7 @@
       "sub": "useBudgets() + статуси ok/warning/exceeded",
       "path": "src/lib/budgets.ts",
       "col": "lib",
-      "y": 240,
+      "y": 320,
       "module": "m-budg"
     },
     {
@@ -1041,7 +1051,7 @@
       "sub": "символи валют + formatAmount",
       "path": "src/lib/currency.ts",
       "col": "lib",
-      "y": 400,
+      "y": 480,
       "module": "m-cur"
     },
     {
@@ -1052,7 +1062,7 @@
       "sub": "Prisma adapter поверх SQLCipher",
       "path": "src/lib/db/encrypted-adapter.ts",
       "col": "lib",
-      "y": 480,
+      "y": 560,
       "module": "m-vault"
     },
     {
@@ -1063,8 +1073,18 @@
       "sub": "застосування міграцій на зашифрованій БД",
       "path": "src/lib/db/migrator.ts",
       "col": "lib",
-      "y": 720,
+      "y": 880,
       "module": "m-vault"
+    },
+    {
+      "id": "lib-exporttransactions",
+      "group": "lib",
+      "kind": "lib",
+      "name": "lib/exportTransactions.ts",
+      "sub": "",
+      "path": "src/lib/exportTransactions.ts",
+      "col": "lib",
+      "y": 640
     },
     {
       "id": "lib-hooks",
@@ -1074,7 +1094,7 @@
       "sub": "useCurrencyRates() · TTL 5хв",
       "path": "src/lib/hooks.ts",
       "col": "lib",
-      "y": 560,
+      "y": 720,
       "module": "m-cur"
     },
     {
@@ -1085,7 +1105,7 @@
       "sub": "MCC → категорія + getEffectiveCategory(overrides) · 15 категорій",
       "path": "src/lib/mcc.ts",
       "col": "lib",
-      "y": 640,
+      "y": 800,
       "module": "m-cat"
     },
     {
@@ -1096,7 +1116,7 @@
       "sub": "getClientInfo · getStatement · getCurrencyRates · setWebhook",
       "path": "src/lib/monobank.ts",
       "col": "lib",
-      "y": 800,
+      "y": 960,
       "module": "m-sync"
     },
     {
@@ -1107,7 +1127,7 @@
       "sub": "хешування + verify паролів",
       "path": "src/lib/passwords.ts",
       "col": "lib",
-      "y": 880,
+      "y": 1040,
       "module": "m-auth"
     },
     {
@@ -1118,7 +1138,7 @@
       "sub": "Prisma Client (singleton)",
       "path": "src/lib/prisma.ts",
       "col": "lib",
-      "y": 960,
+      "y": 1120,
       "module": "m-sync"
     },
     {
@@ -1129,7 +1149,7 @@
       "sub": "",
       "path": "src/lib/transfers.ts",
       "col": "lib",
-      "y": 1120
+      "y": 1280
     },
     {
       "id": "lib-usedbhistory",
@@ -1139,7 +1159,7 @@
       "sub": "",
       "path": "src/lib/useDbHistory.ts",
       "col": "lib",
-      "y": 1200
+      "y": 1360
     },
     {
       "id": "lib-usemonthcomparison",
@@ -1149,7 +1169,7 @@
       "sub": "порівняння витрат поточного vs минулого місяця",
       "path": "src/lib/useMonthComparison.ts",
       "col": "lib",
-      "y": 1280,
+      "y": 1440,
       "module": "m-anal"
     },
     {
@@ -1218,6 +1238,16 @@
       "module": "m-cat"
     },
     {
+      "id": "comp-dailycategorychart",
+      "group": "comp",
+      "kind": "comp",
+      "name": "DailyCategoryChart",
+      "sub": "",
+      "path": "src/components/DailyCategoryChart.tsx",
+      "col": "comp",
+      "y": 560
+    },
+    {
       "id": "comp-dailychart",
       "group": "comp",
       "kind": "comp",
@@ -1225,8 +1255,18 @@
       "sub": "гістограма витрат по днях",
       "path": "src/components/DailyChart.tsx",
       "col": "comp",
-      "y": 560,
+      "y": 640,
       "module": "m-anal"
+    },
+    {
+      "id": "comp-dashboardwelcome",
+      "group": "comp",
+      "kind": "comp",
+      "name": "DashboardWelcome",
+      "sub": "",
+      "path": "src/components/DashboardWelcome.tsx",
+      "col": "comp",
+      "y": 720
     },
     {
       "id": "comp-dataprovider",
@@ -1236,7 +1276,7 @@
       "sub": "глобальний стан: token, client, statements, overrides, manual accounts; TTL кеш",
       "path": "src/components/DataProvider.tsx",
       "col": "comp",
-      "y": 640,
+      "y": 800,
       "module": "m-sync"
     },
     {
@@ -1247,7 +1287,17 @@
       "sub": "",
       "path": "src/components/DateRangeFilter.tsx",
       "col": "comp",
-      "y": 720
+      "y": 880
+    },
+    {
+      "id": "comp-mobilenav",
+      "group": "comp",
+      "kind": "comp",
+      "name": "MobileNav",
+      "sub": "",
+      "path": "src/components/MobileNav.tsx",
+      "col": "comp",
+      "y": 960
     },
     {
       "id": "comp-monthcomparison",
@@ -1257,7 +1307,7 @@
       "sub": "поточний місяць vs попередній",
       "path": "src/components/MonthComparison.tsx",
       "col": "comp",
-      "y": 800,
+      "y": 1040,
       "module": "m-anal"
     },
     {
@@ -1268,8 +1318,18 @@
       "sub": "ручний тригер синхронізації · cooldown 5хв",
       "path": "src/components/RefreshButton.tsx",
       "col": "comp",
-      "y": 880,
+      "y": 1120,
       "module": "m-sync"
+    },
+    {
+      "id": "comp-safetospendcard",
+      "group": "comp",
+      "kind": "comp",
+      "name": "SafeToSpendCard",
+      "sub": "",
+      "path": "src/components/SafeToSpendCard.tsx",
+      "col": "comp",
+      "y": 1200
     },
     {
       "id": "comp-sidebar",
@@ -1279,7 +1339,7 @@
       "sub": "лівий навігаційний сайдбар",
       "path": "src/components/Sidebar.tsx",
       "col": "comp",
-      "y": 960
+      "y": 1280
     },
     {
       "id": "comp-spendingchart",
@@ -1289,8 +1349,18 @@
       "sub": "pie chart витрат по категоріях",
       "path": "src/components/SpendingChart.tsx",
       "col": "comp",
-      "y": 1040,
+      "y": 1360,
       "module": "m-anal"
+    },
+    {
+      "id": "comp-spendingsummarycard",
+      "group": "comp",
+      "kind": "comp",
+      "name": "SpendingSummaryCard",
+      "sub": "",
+      "path": "src/components/SpendingSummaryCard.tsx",
+      "col": "comp",
+      "y": 1440
     },
     {
       "id": "comp-themeprovider",
@@ -1300,7 +1370,7 @@
       "sub": "dark / light mode",
       "path": "src/components/ThemeProvider.tsx",
       "col": "comp",
-      "y": 1120
+      "y": 1520
     },
     {
       "id": "comp-toast",
@@ -1310,7 +1380,7 @@
       "sub": "спливаючі повідомлення",
       "path": "src/components/Toast.tsx",
       "col": "comp",
-      "y": 1200
+      "y": 1600
     },
     {
       "id": "comp-transfermenu",
@@ -1320,7 +1390,7 @@
       "sub": "",
       "path": "src/components/TransferMenu.tsx",
       "col": "comp",
-      "y": 1280
+      "y": 1680
     },
     {
       "id": "db-sqlite",
@@ -1599,6 +1669,14 @@
       "to": "lib-mcc"
     },
     {
+      "from": "comp-dailycategorychart",
+      "to": "lib-currency"
+    },
+    {
+      "from": "comp-dailycategorychart",
+      "to": "lib-analytics"
+    },
+    {
       "from": "comp-dailychart",
       "to": "lib-currency"
     },
@@ -1619,6 +1697,10 @@
       "to": "lib-usemonthcomparison"
     },
     {
+      "from": "comp-safetospendcard",
+      "to": "lib-currency"
+    },
+    {
       "from": "comp-spendingchart",
       "to": "lib-mcc"
     },
@@ -1627,8 +1709,24 @@
       "to": "lib-currency"
     },
     {
+      "from": "comp-spendingsummarycard",
+      "to": "lib-currency"
+    },
+    {
+      "from": "comp-spendingsummarycard",
+      "to": "lib-analytics"
+    },
+    {
       "from": "comp-transfermenu",
       "to": "lib-transfers"
+    },
+    {
+      "from": "lib-analytics",
+      "to": "lib-mcc"
+    },
+    {
+      "from": "lib-analytics",
+      "to": "lib-exporttransactions"
     },
     {
       "from": "lib-bootstrap",
@@ -1641,6 +1739,18 @@
     {
       "from": "lib-budgets",
       "to": "lib-mcc"
+    },
+    {
+      "from": "lib-budgets",
+      "to": "lib-analytics"
+    },
+    {
+      "from": "lib-exporttransactions",
+      "to": "lib-currency"
+    },
+    {
+      "from": "lib-exporttransactions",
+      "to": "lib-transfers"
     },
     {
       "from": "lib-usemonthcomparison",
@@ -1660,7 +1770,19 @@
     },
     {
       "from": "page-analytics",
+      "to": "lib-analytics"
+    },
+    {
+      "from": "page-analytics",
       "to": "lib-currency"
+    },
+    {
+      "from": "page-analytics",
+      "to": "lib-hooks"
+    },
+    {
+      "from": "page-analytics",
+      "to": "lib-budgets"
     },
     {
       "from": "page-analytics",
@@ -1669,6 +1791,14 @@
     {
       "from": "page-budgets",
       "to": "lib-budgets"
+    },
+    {
+      "from": "page-budgets",
+      "to": "lib-analytics"
+    },
+    {
+      "from": "page-budgets",
+      "to": "lib-hooks"
     },
     {
       "from": "page-budgets",
@@ -1681,6 +1811,10 @@
     {
       "from": "page-dashboard",
       "to": "lib-budgets"
+    },
+    {
+      "from": "page-dashboard",
+      "to": "lib-analytics"
     },
     {
       "from": "page-dashboard",
@@ -1743,6 +1877,14 @@
       "to": "page-analytics"
     },
     {
+      "from": "comp-dailycategorychart",
+      "to": "page-analytics"
+    },
+    {
+      "from": "comp-spendingsummarycard",
+      "to": "page-analytics"
+    },
+    {
       "from": "comp-accountfilter",
       "to": "page-analytics"
     },
@@ -1752,6 +1894,10 @@
     },
     {
       "from": "comp-daterangefilter",
+      "to": "page-analytics"
+    },
+    {
+      "from": "comp-toast",
       "to": "page-analytics"
     },
     {
@@ -1779,11 +1925,23 @@
       "to": "page-dashboard"
     },
     {
+      "from": "comp-toast",
+      "to": "page-dashboard"
+    },
+    {
       "from": "comp-accountcard",
       "to": "page-dashboard"
     },
     {
       "from": "comp-budgetalertbanner",
+      "to": "page-dashboard"
+    },
+    {
+      "from": "comp-safetospendcard",
+      "to": "page-dashboard"
+    },
+    {
+      "from": "comp-dashboardwelcome",
       "to": "page-dashboard"
     },
     {
@@ -1832,7 +1990,23 @@
     },
     {
       "from": "comp-themeprovider",
+      "to": "comp-dailycategorychart"
+    },
+    {
+      "from": "comp-themeprovider",
       "to": "comp-dailychart"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "comp-dashboardwelcome"
+    },
+    {
+      "from": "comp-themeprovider",
+      "to": "comp-mobilenav"
+    },
+    {
+      "from": "comp-dataprovider",
+      "to": "comp-mobilenav"
     },
     {
       "from": "comp-themeprovider",

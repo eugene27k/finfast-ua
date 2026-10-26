@@ -27,6 +27,24 @@ export default function BudgetProgressCard({
       ? "#f59e0b"
       : categoryColor;
 
+  const periodShort =
+    status.period === "day"
+      ? "день"
+      : status.period === "week"
+      ? "тиждень"
+      : status.period === "month"
+      ? "місяць"
+      : null;
+
+  const paceColor =
+    status.pace === "exceeded"
+      ? "text-red-600 dark:text-red-400"
+      : status.pace === "projected_over"
+      ? "text-orange-600 dark:text-orange-400"
+      : status.pace === "over_pace"
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-green-600 dark:text-green-400";
+
   return (
     <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between mb-3">
@@ -38,6 +56,11 @@ export default function BudgetProgressCard({
           <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             {status.category}
           </span>
+          {periodShort && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
+              {periodShort}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -88,6 +111,33 @@ export default function BudgetProgressCard({
           {status.percentage.toFixed(0)}%
         </span>
       </div>
+
+      {(status.dailyLimit != null || status.projectedMonthEnd != null) && (
+        <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 space-y-1">
+          {status.dailyLimit != null && (
+            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+              <span>Ціль</span>
+              <span>
+                ≈ {formatAmount(Math.round(status.dailyLimit), currencyCode)}/день
+                {status.monthlyLimit != null && (
+                  <>
+                    {" · "}
+                    {formatAmount(Math.round(status.monthlyLimit), currencyCode)}/міс
+                  </>
+                )}
+              </span>
+            </div>
+          )}
+          {status.projectedMonthEnd != null && status.spent > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500 dark:text-gray-400">На цьому темпі</span>
+              <span className={paceColor}>
+                ≈ {formatAmount(Math.round(status.projectedMonthEnd), currencyCode)} до кінця місяця
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

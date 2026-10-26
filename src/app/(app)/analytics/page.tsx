@@ -4,12 +4,18 @@ import { useState, useMemo, useEffect } from "react";
 import { useData } from "@/components/DataProvider";
 import SpendingChart from "@/components/SpendingChart";
 import DailyChart from "@/components/DailyChart";
+import DailyCategoryChart from "@/components/DailyCategoryChart";
+import SpendingSummaryCard from "@/components/SpendingSummaryCard";
 import AccountFilter from "@/components/AccountFilter";
 import RefreshButton from "@/components/RefreshButton";
 import DateRangeFilter, { getDefaultRange, type DateRange } from "@/components/DateRangeFilter";
 import { useDbHistory } from "@/lib/useDbHistory";
 import { getEffectiveCategory } from "@/lib/mcc";
+import { buildAccountCurrencyMap } from "@/lib/analytics";
 import { formatAmount } from "@/lib/currency";
+import { useCurrencyRates } from "@/lib/hooks";
+import { useBudgets } from "@/lib/budgets";
+import { useToast } from "@/components/Toast";
 import { useMonthComparison } from "@/lib/useMonthComparison";
 import MonthComparison from "@/components/MonthComparison";
 import { useRouter } from "next/navigation";
@@ -19,6 +25,7 @@ export default function AnalyticsPage() {
     token,
     tokenReady,
     client,
+    statements,
     statementsLoading: loading,
     refresh,
     getFiltered,
@@ -31,8 +38,23 @@ export default function AnalyticsPage() {
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [hideInactive, setHideInactive] = useState(true);
   const [range, setRange] = useState<DateRange>(getDefaultRange);
+  const [dailyView, setDailyView] = useState<"category" | "flow">("category");
+
+  const { data: rates } = useCurrencyRates();
+  const { budgets, setBudget } = useBudgets();
+  const { toast } = useToast();
 
   const currencyCode = client?.accounts[0]?.currencyCode || 980;
+
+  // Bridge: turn an observed average into a daily budget target (in UAH).
+  const handleMakeBudget = (category: string, dailyMinor: number) => {
+    if (category in budgets) {
+      toast(`Бюджет для «${category}» вже є — змініть його на вкладці Бюджети`, "info");
+      return;
+    }
+    setBudget(category, dailyMinor, "day");
+    toast(`Бюджет «${category}»: ≈ ${formatAmount(dailyMinor, 980)}/день`, "success");
+  };
 
   // Always merge persisted DB history with live data. Live statements cover only
   // the last ~30 days and can be incomplete when Monobank rate-limits the fetch,
@@ -62,6 +84,14 @@ export default function AnalyticsPage() {
     const info = getTransferInfo(transactions);
     return transactions.filter((tx) => !info.get(tx.id)?.internal);
   }, [transactions, getTransferInfo]);
+
+  // `amount` is in each transaction's ACCOUNT currency; the statement's
+  // currencyCode is the operation currency. This map lets aggregates convert
+  // amounts to UAH by the correct (account) currency.
+  const accountCurrencyByTxId = useMemo(
+    () => buildAccountCurrencyMap(statements, client?.accounts ?? [], history),
+    [statements, client, history]
+  );
 
   const categoryBreakdown = useMemo(() => {
     const expenses = spendable.filter((tx) => tx.amount < 0);
@@ -124,6 +154,16 @@ export default function AnalyticsPage() {
         </div>
       ) : (
         <>
+          <SpendingSummaryCard
+            transactions={spendable}
+            overrides={overrides}
+            rates={rates}
+            accountCurrencyByTxId={accountCurrencyByTxId}
+            from={range.from}
+            to={range.to}
+            onMakeBudget={handleMakeBudget}
+          />
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700">
               <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
@@ -188,13 +228,45 @@ export default function AnalyticsPage() {
           </div>
 
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">
-              Щоденні надходження та витрати
-            </h2>
-            <DailyChart
-              transactions={spendable}
-              currencyCode={currencyCode}
-            />
+            <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                {dailyView === "category"
+                  ? "Витрати за днями і категоріями"
+                  : "Щоденні надходження та витрати"}
+              </h2>
+              <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5 text-xs">
+                <button
+                  onClick={() => setDailyView("category")}
+                  className={`px-3 py-1 rounded-md transition-colors ${
+                    dailyView === "category"
+                      ? "bg-blue-600 text-white"
+                      : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  По категоріях
+                </button>
+                <button
+                  onClick={() => setDailyView("flow")}
+                  className={`px-3 py-1 rounded-md transition-colors ${
+                    dailyView === "flow"
+                      ? "bg-blue-600 text-white"
+                      : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  Доходи / витрати
+                </button>
+              </div>
+            </div>
+            {dailyView === "category" ? (
+              <DailyCategoryChart
+                transactions={spendable}
+                overrides={overrides}
+                rates={rates}
+                accountCurrencyByTxId={accountCurrencyByTxId}
+              />
+            ) : (
+              <DailyChart transactions={spendable} currencyCode={currencyCode} />
+            )}
           </div>
 
           <MonthComparison

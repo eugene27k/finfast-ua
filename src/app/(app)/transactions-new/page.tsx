@@ -75,7 +75,16 @@ interface UnifiedTx {
   amount: number;
   description: string;
   comment?: string | null;
+  /** Currency of `amount` — ALWAYS the account currency (Monobank charges the card in it). */
   currencyCode: number;
+  /**
+   * For a foreign-currency operation, the original operation leg. Monobank's
+   * statement `currencyCode` is the OPERATION currency (e.g. 840 USD) while
+   * `amount` is in the account currency — so these carry the "133.74 $" info
+   * without ever being confused with `amount`/`currencyCode` above.
+   */
+  opAmount?: number;
+  opCurrencyCode?: number;
   accountId: string;
   accountName: string;
   badgeText: string;
@@ -84,6 +93,8 @@ interface UnifiedTx {
   source: "mono" | "manual";
   manualTx?: ManualTransactionData;
   manualAccount?: ManualAccountData;
+  /** Raw Monobank statement, carrying all technical fields for export. */
+  monoTx?: MonobankStatement;
 }
 
 /* ── Loading progress ──────────────────────────────────── */
@@ -346,9 +357,19 @@ function TxRow({
   const isExpense = item.amount < 0;
   const isInternal = mark.internal;
   const date = new Date(item.time * 1000);
-  const isNotUah = item.currencyCode !== 980;
-  const uahAmount = isNotUah ? toUah(item.amount, item.currencyCode, currencyRates) : null;
   const isManual = item.source === "manual";
+  // `item.amount`/`item.currencyCode` are the account-currency leg (what was
+  // charged). The secondary line mirrors Monobank: for a foreign-currency
+  // purchase show the original operation amount (e.g. "131,60 $"); for a
+  // non-UAH account show the ≈UAH equivalent instead.
+  const foreignOp =
+    item.opAmount != null &&
+    item.opCurrencyCode != null &&
+    item.opCurrencyCode !== item.currencyCode;
+  const uahAmount =
+    !foreignOp && item.currencyCode !== 980
+      ? toUah(item.amount, item.currencyCode, currencyRates)
+      : null;
 
   return (
     <div className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 last:border-0 group">
@@ -418,11 +439,15 @@ function TxRow({
           >
             {isExpense ? "" : "+"}{formatAmount(item.amount, item.currencyCode)}
           </div>
-          {uahAmount !== null && (
+          {foreignOp ? (
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {formatAmount(Math.abs(item.opAmount!), item.opCurrencyCode!)}
+            </div>
+          ) : uahAmount !== null ? (
             <div className="text-xs text-gray-500 dark:text-gray-400">
               ≈ {formatAmount(uahAmount, 980)}
             </div>
-          )}
+          ) : null}
           <div className="text-xs text-gray-400 dark:text-gray-500">
             {date.toLocaleDateString("uk-UA", { day: "numeric", month: "short" })}{" "}
             {date.toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}
@@ -472,7 +497,8 @@ function TransactionsContent() {
   const router = useRouter();
 
   const initialAccount = searchParams.get("account") || "";
-  const [showForm, setShowForm] = useState(false);
+  // The mobile FAB links here with `?add=1` to open the new-transaction form.
+  const [showForm, setShowForm] = useState(searchParams.get("add") === "1");
   const [editingTx, setEditingTx] = useState<{ tx: ManualTransactionData; accountId: string } | null>(null);
   const [filterAccountId, setFilterAccountId] = useState<string>(initialAccount);
   const [filterSource, setFilterSource] = useState<"all" | "mono" | "manual">("all");
@@ -483,6 +509,7 @@ function TransactionsContent() {
   const [showInternal, setShowInternal] = useState(false);
   const [showIncome, setShowIncome] = useState(true);
   const [showExpense, setShowExpense] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (tokenReady && !token) router.replace("/settings");
@@ -562,13 +589,20 @@ function TransactionsContent() {
             amount: tx.amount,
             description: tx.description,
             comment: tx.comment,
-            currencyCode: tx.currencyCode,
+            // `amount` is in the ACCOUNT currency; tx.currencyCode is the
+            // OPERATION currency (840/978 for a foreign purchase). Pairing
+            // amount with the account currency keeps display and UAH totals
+            // correct; the operation leg is kept separately for info.
+            currencyCode: accInfo.currencyCode,
+            opAmount: tx.operationAmount,
+            opCurrencyCode: tx.currencyCode,
             accountId: accId,
             accountName: accInfo.name,
             badgeText: cat.name,
             badgeColor: cat.color,
             mcc: tx.mcc,
             source: "mono",
+            monoTx: tx,
           });
         }
       }
@@ -588,13 +622,18 @@ function TransactionsContent() {
             amount: tx.amount,
             description: tx.description,
             comment: tx.comment,
-            currencyCode: tx.currencyCode,
+            // See the live branch above: pair amount with the account currency,
+            // keep the operation leg (tx.currencyCode/operationAmount) separate.
+            currencyCode: accInfo.currencyCode,
+            opAmount: tx.operationAmount,
+            opCurrencyCode: tx.currencyCode,
             accountId: tx.accountId,
             accountName: accInfo.name,
             badgeText: cat.name,
             badgeColor: cat.color,
             mcc: tx.mcc,
             source: "mono",
+            monoTx: tx,
           });
         }
       }
@@ -699,6 +738,21 @@ function TransactionsContent() {
     return result;
   }, [filtered, showIncome, showExpense]);
 
+  const handleExport = async () => {
+    if (exporting || displayedTransactions.length === 0) return;
+    setExporting(true);
+    try {
+      // Loaded on demand so the XLSX library stays out of the initial bundle.
+      const { exportTransactionsXlsx } = await import("@/lib/exportTransactions");
+      await exportTransactionsXlsx(displayedTransactions, transferInfo, currencyRates);
+    } catch (e) {
+      console.error("Export failed", e);
+      alert("Не вдалося сформувати файл експорту. Спробуйте ще раз.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleCreate = async (data: { manualAccountId: string; amount: number; description: string; time: number }) => {
     const res = await fetch("/api/manual-transactions", {
       method: "POST",
@@ -752,6 +806,29 @@ function TransactionsContent() {
         </div>
         <div className="flex items-center gap-3">
           <RefreshButton onClick={refresh} loading={statementsLoading} lastRefreshedAt={lastRefreshedAt} />
+          <button
+            onClick={handleExport}
+            disabled={exporting || displayedTransactions.length === 0}
+            title="Експортувати відфільтровані транзакції в XLSX"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exporting ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+                Експорт…
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                Експорт
+              </>
+            )}
+          </button>
           {uncategorizedForAi.length > 0 && (
             <button
               onClick={() => setShowAiPanel(!showAiPanel)}

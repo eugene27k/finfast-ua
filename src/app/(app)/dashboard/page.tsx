@@ -1,22 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useData } from "@/components/DataProvider";
 import { useBudgets, getBudgetStatuses } from "@/lib/budgets";
+import { buildAccountCurrencyMap } from "@/lib/analytics";
 import { useCurrencyRates } from "@/lib/hooks";
+import { useToast } from "@/components/Toast";
 import AccountCard from "@/components/AccountCard";
 import BudgetAlertBanner from "@/components/BudgetAlertBanner";
+import SafeToSpendCard from "@/components/SafeToSpendCard";
+import DashboardWelcome from "@/components/DashboardWelcome";
 import { getCurrencyInfo, formatAmount } from "@/lib/currency";
 import { sortAccounts, filterInactiveAccounts } from "@/lib/accounts";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 
 export default function DashboardPage() {
-  const { token, tokenReady, client, clientLoading: loading, clientError: error, getFiltered, overrides, activeAccountIds, getTransferInfo } = useData();
+  const { token, tokenReady, client, statements, clientLoading: loading, clientError: error, getFiltered, overrides, activeAccountIds, getTransferInfo, clearToken } = useData();
   const { data: rates } = useCurrencyRates();
   const { budgets } = useBudgets();
+  const { toast } = useToast();
   const router = useRouter();
   const [hideInactive, setHideInactive] = useState(true);
+  const toastedRef = useRef<Set<string>>(new Set());
 
   const now = new Date();
   const monthStart = useMemo(
@@ -33,14 +38,36 @@ export default function DashboardPage() {
     return inMonth.filter((tx) => !info.get(tx.id)?.internal);
   }, [getFiltered, monthStart, getTransferInfo]);
 
-  const budgetStatuses = useMemo(
-    () => getBudgetStatuses(budgets, monthTransactions, overrides),
-    [budgets, monthTransactions, overrides]
+  // `amount` is in each transaction's ACCOUNT currency; the statement's
+  // currencyCode is the operation currency. Resolve account currency by id so
+  // spend converts to UAH correctly (a no-op for UAH cards).
+  const accountCurrencyByTxId = useMemo(
+    () => buildAccountCurrencyMap(statements, client?.accounts ?? []),
+    [statements, client]
   );
 
+  const budgetStatuses = useMemo(
+    () => getBudgetStatuses(budgets, monthTransactions, overrides, rates, accountCurrencyByTxId),
+    [budgets, monthTransactions, overrides, rates, accountCurrencyByTxId]
+  );
+
+  // Notify once per category per session when a budget is over or projected to
+  // exceed at the current pace.
   useEffect(() => {
-    if (tokenReady && !token) router.replace("/settings");
-  }, [tokenReady, token, router]);
+    for (const s of budgetStatuses) {
+      const over = s.status === "exceeded" || s.pace === "exceeded";
+      const projected = s.pace === "projected_over";
+      if ((over || projected) && !toastedRef.current.has(s.category)) {
+        toastedRef.current.add(s.category);
+        toast(
+          over
+            ? `Бюджет «${s.category}» перевищено`
+            : `«${s.category}»: на цьому темпі перевищите бюджет`,
+          over ? "error" : "info"
+        );
+      }
+    }
+  }, [budgetStatuses, toast]);
 
   if (!tokenReady || loading) {
     return (
@@ -50,11 +77,23 @@ export default function DashboardPage() {
     );
   }
 
+  if (!token) {
+    return <DashboardWelcome />;
+  }
+
   if (error) {
     return (
-      <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-4 rounded-lg">
-        <p className="font-medium">Помилка завантаження</p>
-        <p className="text-sm mt-1">{error}</p>
+      <div className="max-w-2xl mx-auto space-y-3">
+        <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-4 rounded-lg">
+          <p className="font-medium">Помилка завантаження</p>
+          <p className="text-sm mt-1">{error}</p>
+        </div>
+        <button
+          onClick={clearToken}
+          className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        >
+          Підключити інший токен
+        </button>
       </div>
     );
   }
@@ -94,6 +133,8 @@ export default function DashboardPage() {
         </h1>
         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Огляд ваших фінансів</p>
       </div>
+
+      <SafeToSpendCard statuses={budgetStatuses} currencyCode={980} />
 
       <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-6 rounded-2xl shadow-lg">
         <p className="text-sm text-blue-200">Доступний баланс (UAH)</p>

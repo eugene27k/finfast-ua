@@ -68,8 +68,21 @@ export interface SpendingCategory {
 
 export interface BudgetStatus {
   category: string;
+  /** Monthly-equivalent limit (base-currency minor units) — drives the bar. */
   limit: number;
   spent: number;
   percentage: number;
   status: "ok" | "warning" | "exceeded";
+  // ── Daily-rate fields (optional for backward compatibility) ──
+  period?: "day" | "week" | "month";
+  /** Implied daily limit (minor units). */
+  dailyLimit?: number;
+  /** Monthly-equivalent limit (minor units); mirrors `limit`. */
+  monthlyLimit?: number;
+  /** Average daily spend so far this month (minor units). */
+  dailyAvgSoFar?: number;
+  /** Projected month-end spend at the current pace (minor units). */
+  projectedMonthEnd?: number;
+  /** Spending pace relative to the target. */
+  pace?: "on_track" | "over_pace" | "projected_over" | "exceeded";
 }
